@@ -8,7 +8,7 @@ redirect_from:
   - /about.html
 ---
 
-Hello! Welcome to my website! Here's a quick rundown about me:
+Hello! Welcome to my website! For those unfamiliar with the Hitchhiker's Guide to the Galaxy, 'Deep Thought' is the massive planetary computer which posed the famous answer of 42 to the greatest unknown question. 
 
 Who I am
 ======
@@ -37,7 +37,5 @@ When I am
 ======
 This website is recent as of October, 2023. In this time, I am in the fall quarter of my sophomore year. 
 
-
-
-And thanks [academicpages](https://github.com/academicpages/academicpages.github.io) for making this wbesite possible :joy:.
+This website is very much a work in progress, and has been put on the back-burner as my academic projects for the school year ramp up. And thanks [academicpages](https://github.com/academicpages/academicpages.github.io) for making this wbesite possible :joy:.
 
