@@ -8,7 +8,7 @@ redirect_from:
   - /about.html
 ---
 
-Hello! Welcome to my website! For those unfamiliar with the Hitchhiker's Guide to the Galaxy, 'Deep Thought' is the massive planetary computer which posed the famous answer of 42 to the greatest unknown question. 
+Hello! Welcome to my website! For those unfamiliar with the Hitchhiker's Guide to the Galaxy, 'Deep Thought' is the massive planetary computer which posed the famous ultimate answer of 42 to the greatest unknown question. 
 
 Who I am
 ======
