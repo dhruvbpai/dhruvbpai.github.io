@@ -37,5 +37,5 @@ When I am
 ======
 This website is recent as of October, 2023. In this time, I am in the fall quarter of my sophomore year. 
 
-This website is very much a work in progress, and has been put on the back-burner as my academic projects for the school year ramp up. And thanks [academicpages](https://github.com/academicpages/academicpages.github.io) for making this wbesite possible :joy:.
+This website is very much a work in progress, and has been put on the back-burner as my academic projects for the school year ramp up. And thanks [academicpages](https://github.com/academicpages/academicpages.github.io) for making this wbesite possible.
 
