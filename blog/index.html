@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog — Dhruv Pai</title>
+  <meta name="description" content="Writing by Dhruv Pai">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script>
+    (function() {
+      var t = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="/" class="nav-name">Dhruv Pai</a>
+        <div class="nav-links">
+          <a href="/about/">about</a>
+          <a href="/blog/" class="active">blog</a>
+          <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"></button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="container">
+      <div class="items">
+        <a href="/blog/ouroboros/" class="item">
+          <div class="item-content">
+            <span class="item-title">The Loss Curve Ouroboros</span>
+            <div class="item-footer">
+              <span class="item-meta">May 2025</span>
+              <span class="item-arrow">→</span>
+            </div>
+          </div>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/dhruvbpai" target="_blank" rel="noopener">github</a>
+        <a href="https://scholar.google.com/citations?user=b8KdzTYAAAAJ" target="_blank" rel="noopener">scholar</a>
+        <a href="https://linkedin.com/in/dhruvpai" target="_blank" rel="noopener">linkedin</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function() {
+      var theme = document.documentElement.getAttribute('data-theme') || 'dark';
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = theme === 'dark' ? 'light' : 'dark';
+      });
+    })();
+
+    function toggleTheme() {
+      var html = document.documentElement;
+      var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = next === 'dark' ? 'light' : 'dark';
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dhruv Pai</title>
+  <meta name="description" content="Chief Scientist at Tilde Research">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script>
+    (function() {
+      var t = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+</head>
+<body>
+  <div class="landing-header">
+    <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"></button>
+  </div>
+
+  <main class="landing">
+    <div class="landing-content">
+      <h1 class="landing-name" aria-label="Dhruv Pai">Dhruv Pai<span class="cursor" aria-hidden="true">_</span></h1>
+      <p class="landing-role">Chief Scientist, <a href="https://tilderesearch.com" target="_blank" rel="noopener">Tilde Research</a></p>
+      <nav class="landing-nav" aria-label="Main navigation">
+        <a href="/about/">about</a>
+        <a href="/blog/">blog</a>
+      </nav>
+      <div class="landing-links">
+        <a href="https://github.com/dhruvbpai" target="_blank" rel="noopener">github</a>
+        <a href="https://scholar.google.com/citations?user=b8KdzTYAAAAJ" target="_blank" rel="noopener">scholar</a>
+        <a href="https://linkedin.com/in/dhruvpai" target="_blank" rel="noopener">linkedin</a>
+      </div>
+    </div>
+    <div class="scroll-hint" aria-hidden="true"><span>↓</span></div>
+  </main>
+
+  <section class="descent">
+    <div class="container">
+      <h2 class="descent-title">human descent <button class="info-btn" onclick="showInfo('descent-info')" aria-label="About human descent">?</button></h2>
+      <div class="descent-main">
+        <pre class="descent-plot" id="descent-plot"></pre>
+        <pre class="descent-curves" id="descent-curves"></pre>
+      </div>
+      <pre class="descent-mom" id="descent-mom"></pre>
+      <div class="descent-lr">
+        <label for="lr-slider">lr</label>
+        <input type="range" id="lr-slider" min="-4" max="0" step="0.1" value="-1.3">
+        <span id="lr-val">0.050</span>
+      </div>
+      <div class="descent-controls">
+        <button class="descent-btn" onclick="descentStep('sgd')"><span class="btn-key">1</span> sgd</button>
+        <button class="descent-btn" onclick="descentStep('adam')"><span class="btn-key">2</span> adam</button>
+        <button class="descent-btn" onclick="descentStep('muon')"><span class="btn-key">3</span> muon</button>
+        <button class="descent-btn" onclick="descentStep('aurora')"><span class="btn-key">4</span> aurora</button>
+        <button class="descent-btn descent-btn-reset" onclick="descentReset()"><span class="btn-key">r</span> reset</button>
+      </div>
+    </div>
+  </section>
+
+  <button class="info-btn bg-info-btn" onclick="showInfo('bg-info')" aria-label="About background">?</button>
+
+  <div class="info-overlay" id="info-overlay" onclick="hideInfo()"></div>
+
+  <div class="info-popup" id="bg-info">
+    <button class="info-popup-close" onclick="hideInfo()">×</button>
+    <div class="info-popup-title">background</div>
+    Conway's Game of Life: a cellular automaton where cells live, die, or are born based on their neighbors. 
+  </div>
+
+  <div class="info-popup" id="descent-info">
+    <button class="info-popup-close" onclick="hideInfo()">×</button>
+    <div class="info-popup-title">human descent</div>
+    You are the optimizer. Press an optimizer button to take a gradient step.  
+  </div>
+
+  <script src="/fractal.js"></script>
+  <script src="/descent.js"></script>
+  <script>
+    (function() {
+      var theme = document.documentElement.getAttribute('data-theme') || 'dark';
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = theme === 'dark' ? 'light' : 'dark';
+      });
+    })();
+
+    function showInfo(id) {
+      document.getElementById(id).classList.add('visible');
+      document.getElementById('info-overlay').classList.add('visible');
+    }
+
+    function hideInfo() {
+      document.querySelectorAll('.info-popup').forEach(function(el) {
+        el.classList.remove('visible');
+      });
+      document.getElementById('info-overlay').classList.remove('visible');
+    }
+
+    function toggleTheme() {
+      var html = document.documentElement;
+      var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = next === 'dark' ? 'light' : 'dark';
+      });
+    }
+  </script>
+</body>
+</html>
