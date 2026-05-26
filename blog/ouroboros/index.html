@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Loss Curve Ouroboros — Dhruv Pai</title>
+  <meta name="description" content="What happens when you use a model's loss curve as the learning rate schedule for the next run?">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});"></script>
+  <script>
+    (function() {
+      var t = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="/" class="nav-name">Dhruv Pai</a>
+        <div class="nav-links">
+          <a href="/about/">about</a>
+          <a href="/blog/" class="active">blog</a>
+          <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"></button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="container">
+      <div class="post-header">
+        <h1 class="post-title">The Loss Curve Ouroboros</h1>
+        <div class="post-date">May 2025</div>
+      </div>
+
+      <div class="post-body">
+        <div class="post-figure">
+          <canvas id="ouroboros-diagram"></canvas>
+          <div class="post-figure-caption">Click and drag to rotate. Scroll to zoom.</div>
+        </div>
+
+        <p>
+          Sometimes it's fun to ask ridiculous quesitions. For example, what if we take the loss curve from a training run, rescale it
+          into a valid learning rate range, and use it as the schedule for the next run?
+          Then do it again. And again. The loss curve eats its own tail (hence Ouroborous). Each generation's
+          output becomes the next generation's input through LR scheduling, forming a bizarre dynamical system over
+          the space of LR schedules.
+        </p>
+
+        <p>
+          Let's walk through what happens. We start with a standard warmup-stable-decay
+          schedule. The model trains well, loss drops like a power law. Now we rescale
+          that loss curve into an LR range. Since the loss decayed to near zero,
+          the resulting schedule starts high but quickly falls to almost nothing.
+          Training with that schedule barely moves the model. The loss stays high.
+          But a high, flat loss curve becomes a high, flat LR schedule. So the
+          next generation actually converges again. Then the cycle repeats. The
+          system oscillates between "good schedule, good convergence" and "bad
+          schedule, bad convergence" before (sometimes) settling into a fixed point.
+        </p>
+
+        <div class="post-figure">
+          <canvas id="walkthrough"></canvas>
+          <div class="walkthrough-controls">
+            <button class="descent-btn" id="walk-prev" disabled><span class="btn-key">←</span> prev</button>
+            <span id="walk-label" class="walk-label">gen 0</span>
+            <button class="descent-btn" id="walk-next"><span class="btn-key">→</span> next</button>
+          </div>
+        </div>
+
+        <h2 class="post-section">Formalizing the problem</h2>
+
+        <p>
+          We need some notation. Suppose we have a model with parameters $\theta$
+          trained by gradient descent on a loss $\mathcal{L}$. Given a learning rate
+          schedule $\eta : [0, T] \to \mathbb{R}_{>0}$, the training dynamics produce
+          a loss curve $L : [0, T] \to \mathbb{R}_{\geq 0}$ defined by
+        </p>
+
+        $$L(t) = \mathcal{L}(\theta(t))$$
+
+        <p>
+          where $\theta(t)$ evolves according to
+        </p>
+
+        $$\dot{\theta}(t) = -\eta(t) \nabla \mathcal{L}(\theta(t))$$
+
+        <p>
+          The loss curve depends on the schedule, so we can think of it as a
+          functional $\mathcal{F}$ that maps schedules to loss curves.
+        </p>
+
+        $$\mathcal{F} : \eta(\cdot) \mapsto L(\cdot)$$
+
+        <p>
+          Now we need the other half of the loop. The rescaling operator
+          $\mathcal{R}$ takes a loss curve and produces a learning rate schedule
+          by normalizing it into a target range $[\eta_{\min}, \eta_{\max}]$.
+        </p>
+
+        $$\mathcal{R}[L](t) = \eta_{\min} + (\eta_{\max} - \eta_{\min}) \cdot \frac{L(t) - L_{\min}}{L_{\max} - L_{\min}}$$
+
+        <p>
+          where $L_{\min} = \min_t L(t)$ and $L_{\max} = \max_t L(t)$. High loss
+          maps to high learning rate, low loss maps to low learning rate.
+        </p>
+
+        <p>
+          The ouroboros is the composition $\mathcal{R} \circ \mathcal{F}$.
+          Starting from some seed schedule $\eta^{(0)}$, we iterate
+        </p>
+
+        $$\eta^{(n+1)} = \mathcal{R} \circ \mathcal{F}[\eta^{(n)}]$$
+
+        <p>
+          A fixed point of this iteration is a schedule $\eta^*$ satisfying
+          $\eta^* = \mathcal{R} \circ \mathcal{F}[\eta^*]$. In other words,
+          a schedule whose loss curve, when rescaled, reproduces itself exactly.
+        </p>
+
+        <p>
+          Notice something useful. The schedule enters the dynamics only through
+          the integrated schedule $A(t) = \int_0^t \eta(\tau) \, d\tau$. This means
+          $\dot{A}(t) = \eta(t)$, so at a fixed point we get an ODE
+        </p>
+
+        $$\dot{A}(t) = \mathcal{R}[\mathcal{F}_A(A(t))]$$
+
+        <p>
+          where $\mathcal{F}_A$ writes the loss as a function of the
+          cumulative schedule $A$ rather than time directly.
+          This is a first-order autonomous ODE in $A$, which is a much nicer
+          object to study than a functional fixed-point equation.
+        </p>
+
+        <h2 class="post-section">Example 1: Linear autoencoder</h2>
+
+        <p>
+          Let's find a setting where $\mathcal{F}$ has a closed form. Consider
+          data $x \sim \mathcal{N}(0, \Sigma)$ with covariance
+          $\Sigma = U \operatorname{diag}(\lambda_1, \dots, \lambda_d) U^\top$
+          where $\lambda_1 \geq \lambda_2 \geq \cdots \geq \lambda_d > 0$.
+          Our model is a linear autoencoder $\hat{x} = W^\top W x$ with
+          $W \in \mathbb{R}^{k \times d}$, so the bottleneck has rank $k$.
+          The MSE loss is
+        </p>
+
+        $$\mathcal{L}(W) = \frac{1}{2} \mathbb{E}\left[\|x - W^\top W x\|^2\right]$$
+
+        <p>
+          This is the setting analyzed by Baldi &amp; Hornik (1989) and
+          Saxe et al. (2014). The key insight is that in the eigenbasis of
+          $\Sigma$, the dynamics decouple. Each eigenmode $i$ has a projection
+          strength $p_i(t) \in [0, 1]$ measuring how much of eigendirection $i$
+          the network has captured. The loss decomposes as
+        </p>
+
+        $$L(t) = \frac{1}{2} \sum_{i=1}^{d} \lambda_i \left(1 - p_i(t)\right)^2$$
+
+        <p>
+          Under gradient flow with schedule $\eta(t)$, each mode evolves
+          independently according to a logistic equation
+        </p>
+
+        $$\dot{p}_i = 2\eta(t) \, \lambda_i \, p_i(1 - p_i)$$
+
+        <p>
+          This has an exact solution. Since the right-hand side factors as
+          $\eta(t)$ times a function of $p_i$ alone, the schedule enters only
+          through the integrated schedule $A(t) = \int_0^t \eta(\tau) \, d\tau$
+          just as we hoped.
+        </p>
+
+        $$p_i(t) = \sigma\!\left(2\lambda_i A(t) + \operatorname{logit}(p_i(0))\right)$$
+
+        <p>
+          where $\sigma$ is the sigmoid and
+          $\operatorname{logit}(p) = \log(p/(1-p))$. Each mode traces out a
+          sigmoid in the cumulative schedule $A$, with rate proportional to its
+          eigenvalue $\lambda_i$. Big eigenvalues get learned first. Small ones
+          take exponentially longer.
+        </p>
+
+        <p>
+          Substituting back, we get the closed-form training operator
+        </p>
+
+        $$\mathcal{F}[\eta](t) = \frac{1}{2} \sum_{i=1}^{d} \lambda_i \left(1 - \sigma\!\left(2\lambda_i A(t) + c_i\right)\right)^2$$
+
+        <p>
+          where $c_i = \operatorname{logit}(p_i(0))$ and
+          $A(t) = \int_0^t \eta(\tau) \, d\tau$. This is $\mathcal{F}$
+          written explicitly as a function of the schedule. It is a sum of
+          squared sigmoid tails, each indexed by an eigenvalue.
+        </p>
+
+        <p>
+          The ouroboros iteration $\eta^{(n+1)} = \mathcal{R} \circ \mathcal{F}[\eta^{(n)}]$
+          is now fully computable. And the fixed-point ODE becomes
+        </p>
+
+        $$\dot{A} = \eta_{\min} + (\eta_{\max} - \eta_{\min}) \cdot \frac{g(A) - g_{\min}}{g_{\max} - g_{\min}}$$
+
+        <p>
+          where $g(A) = \frac{1}{2} \sum_i \lambda_i (1 - \sigma(2\lambda_i A + c_i))^2$
+          is the loss as a function of the cumulative schedule. This is a separable
+          first-order ODE. The right-hand side is a known function of $A$ alone, so
+          we can solve it (at least numerically) and study its fixed points directly.
+        </p>
+
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/dhruvbpai" target="_blank" rel="noopener">github</a>
+        <a href="https://scholar.google.com/citations?user=b8KdzTYAAAAJ" target="_blank" rel="noopener">scholar</a>
+        <a href="https://linkedin.com/in/dhruvpai" target="_blank" rel="noopener">linkedin</a>
+      </div>
+    </div>
+  </footer>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="/blog/ouroboros/diagram.js"></script>
+  <script src="/blog/ouroboros/walkthrough.js"></script>
+  <script>
+    (function() {
+      var theme = document.documentElement.getAttribute('data-theme') || 'dark';
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = theme === 'dark' ? 'light' : 'dark';
+      });
+    })();
+
+    function toggleTheme() {
+      var html = document.documentElement;
+      var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = next === 'dark' ? 'light' : 'dark';
+      });
+    }
+  </script>
+</body>
+</html>

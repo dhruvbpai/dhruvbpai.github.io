@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Bitter Lesson for Sequence Models — Dhruv Pai</title>
+  <meta name="description" content="Expressivity, hardware efficiency, and training stability form a codesign trifecta. The empirical Pareto frontier favors the last two.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});"></script>
+  <script>
+    (function() {
+      var t = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="/" class="nav-name">Dhruv Pai</a>
+        <div class="nav-links">
+          <a href="/about/">about</a>
+          <a href="/blog/" class="active">blog</a>
+          <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"></button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="container">
+      <div class="post-header">
+        <h1 class="post-title">The Bitter Lesson for Sequence Models</h1>
+        <div class="post-date">May 2026</div>
+      </div>
+
+      <div class="post-body">
+
+        <p>
+          You are designing a sequence mixer. You have three things to
+          optimize: expressivity (what functions the layer can represent),
+          hardware efficiency (how many FLOPs you get per wall-clock second),
+          and training stability (how reliably the layer learns at scale).
+          You cannot maximize all three. Which do you sacrifice?
+        </p>
+
+        <p>
+          I want to put forward a hypothesis. I am not certain it is
+          correct. I personally hope it is not. But the evidence I have
+          seen makes me think the answer might be expressivity. Expressivity
+          is the theoretically beautiful axis. It connects to formal
+          language theory, to circuit complexity, to the fundamental
+          question of what computation a sequence model can perform. And
+          yet the empirical record keeps suggesting that models which trade
+          expressivity for efficiency and stability tend to win.
+        </p>
+
+        <p>
+          If this hypothesis holds, it is a version of Sutton's bitter
+          lesson applied to the internal design of sequence models.
+          General methods that scale with compute beat clever methods
+          that encode structure. The structure helps on paper. The compute
+          helps on benchmarks. I want to lay out why I think this story
+          might be true, where the evidence is strong, and where I am
+          genuinely uncertain.
+        </p>
+
+        <h2 class="post-section">The trifecta</h2>
+
+        <p>
+          The three axes are not independent, but they pull in different
+          directions often enough that they form a real design constraint.
+        </p>
+
+        <p>
+          <b>Expressivity</b> is the set of input-output mappings a single
+          layer can realize. A layer with a large, learnable state that
+          updates nonlinearly per token can, in principle, track richer
+          functions of the input history. TTT-MLP
+          <!-- TODO: cite TTT paper -->
+          is an extreme example: the mixer is literally gradient descent on
+          a per-sequence model, giving it Turing-complete per-layer
+          expressivity in the limit.
+        </p>
+
+        <p>
+          <b>Hardware efficiency</b> is how well the layer maps onto actual
+          GPUs. This means large matrix multiplies, minimal memory bandwidth
+          pressure, and parallelism across the sequence dimension during
+          training. A layer that requires sequential per-token state updates
+          with nonlinear dependencies is expressive but slow. A layer that
+          decomposes into chunked matrix products is fast but constrained.
+        </p>
+
+        <p>
+          <b>Training stability</b> is how reliably the layer learns when
+          you stack many copies of it and train on billions of tokens.
+          Complex recurrent updates develop exploding or vanishing
+          gradients. Nonlinear state transitions create loss landscape
+          pathologies. Simple, well-conditioned layers with forget gates
+          and normalizations train cleanly. Complex layers require careful
+          initialization, custom learning rate schedules, and sometimes
+          just don't work at scale.
+        </p>
+
+        <h2 class="post-section">The expressivity temptation</h2>
+
+        <p>
+          The theoretical case for expressivity is real and well-developed.
+          Merrill and Sabharwal
+          <!-- TODO: cite Merrill & Sabharwal state tracking paper -->
+          formalize the notion of state tracking: can a model, reading a
+          sequence of instructions from a finite group, track the composed
+          state? Transformers with hard attention can. Soft-attention
+          transformers struggle. Linear recurrences provably cannot,
+          regardless of dimension. The hierarchy is crisp and
+          mathematically satisfying.
+        </p>
+
+        <p>
+          More broadly, there is a line of work connecting sequence model
+          expressivity to circuit complexity classes.
+          <!-- TODO: cite relevant TC0/NC1 papers if desired -->
+          Fixed-depth transformers sit in $\text{TC}^0$. Adding recurrence
+          or depth pushes into higher classes. The implication is that
+          certain sequence-to-sequence functions are simply inaccessible
+          to shallow, parallelizable architectures.
+        </p>
+
+        <p>
+          These results motivate architectures like TTT-MLP, RWKV's
+          complex-valued recurrences, and various nonlinear SSM variants
+          that try to increase per-layer expressivity. The logic is
+          straightforward: if linear recurrences provably cannot track
+          state, give the recurrence a nonlinear update rule. If softmax
+          attention cannot represent certain functions at fixed depth,
+          make the attention mechanism more powerful.
+        </p>
+
+        <p>
+          The problem is not that these arguments are wrong. They are
+          correct. The question is whether they optimize the axis that
+          matters most in practice.
+        </p>
+
+        <h2 class="post-section">Bias-variance for architectures</h2>
+
+        <p>
+          The classical bias-variance decomposition says that prediction
+          error has two components. Bias is the error from
+          underfitting. A model class that cannot represent the target
+          function will have irreducible bias. Variance is the error from
+          overfitting to noise in the training process. A model class that
+          is too flexible will fit different training runs differently.
+        </p>
+
+        <p>
+          Architecture design has an analogous tradeoff, though the terms
+          map differently. A more expressive mixer has lower approximation
+          bias. It can, in principle, represent harder functions per layer.
+          But expressivity comes at a cost that shows up as something like
+          variance. Not variance in the statistical sense, but variance in
+          the engineering sense: harder to train stably, less
+          hardware-efficient (so fewer layers for the same compute budget),
+          and more sensitive to hyperparameters.
+        </p>
+
+        <p>
+          Consider a concrete comparison. You have a fixed FLOP budget.
+          You can spend it on one layer of TTT-MLP, which runs gradient
+          descent internally and can in principle represent arbitrary
+          sequence functions. Or you can spend the same FLOPs on four
+          layers of gated DeltaNet
+          <!-- TODO: cite DeltaNet paper -->,
+          each of which is a simple linear recurrence with a forget gate
+          and a delta-rule update. Each DeltaNet layer is individually less
+          expressive. But four of them, interleaved with MLPs, compose
+          into a deep network that is empirically competitive or better.
+        </p>
+
+        <!-- TODO: add specific numbers when available -->
+
+        <p>
+          Why? The same reason bagging beats a single complex model. Each
+          simple layer is well-conditioned. Gradients flow cleanly through
+          the forget gates. The chunkwise-parallel decomposition maps
+          perfectly onto GPU matrix units. You can train it stably at
+          scale with standard optimizers. The deep composition of simple
+          layers covers the function space that matters in practice, even
+          though each individual layer is theoretically limited.
+        </p>
+
+        <p>
+          The expressivity gap is real in the worst case. A single
+          DeltaNet layer cannot track a finite group action. But the
+          relevant question is not what a single layer can do in the worst
+          case. It is what a deep stack of simple layers can do on the
+          distribution of actual language, trained with actual gradient
+          descent, at actual scale.
+        </p>
+
+        <h2 class="post-section">Chain of thought breaks the ceiling</h2>
+
+        <p>
+          The strongest version of the expressivity argument is about
+          inherent computational limits. Fixed-depth transformers are in
+          $\text{TC}^0$. They cannot solve problems that require serial
+          computation, like composing $n$ permutations or evaluating
+          Boolean formulas of unbounded depth. No amount of width
+          compensates for insufficient depth. This is a real barrier.
+        </p>
+
+        <p>
+          But chain-of-thought reasoning sidesteps it entirely. Feng,
+          Guo, et al.
+          <!-- TODO: cite Feng/Guo/Tengyu Ma CoT paper -->
+          show that autoregressive transformers with chain-of-thought
+          can solve problems requiring serial computation. The mechanism
+          is simple: each generated token is an intermediate computation
+          step, effectively adding depth at inference time. The model
+          trades tokens for depth. Serial problems that are impossible at
+          fixed depth become tractable when the model can write and read
+          intermediate results.
+        </p>
+
+        <p>
+          This changes the calculus of the trifecta. If you need serial
+          computation, you have two options. You can build a per-layer
+          mechanism that is inherently sequential and expressive (TTT,
+          complex-valued recurrences, nonlinear SSMs). Or you can use a
+          cheap, parallel, stable mixer and let chain-of-thought provide
+          the serial computation at inference time.
+        </p>
+
+        <p>
+          If this decomposition works in practice, the second option is
+          better on two of the three axes. The mixer is hardware-efficient
+          and training-stable. The serial computation happens in token
+          space, which is already optimized for autoregressive generation.
+          You pay in inference tokens, not in architectural complexity.
+          Whether this tradeoff is always favorable is an open question.
+        </p>
+
+        <p>
+          This does not mean expressivity is irrelevant at the layer
+          level. A mixer that is too weak will require too many CoT tokens,
+          making inference expensive. There is a Pareto frontier between
+          layer expressivity and CoT length. But the frontier is
+          asymmetric. Marginal improvements in layer expressivity buy
+          small reductions in CoT length at large costs in efficiency and
+          stability. Marginal improvements in efficiency buy more layers,
+          more data, more scale, and these compound.
+        </p>
+
+        <h2 class="post-section">The frontier is not symmetric</h2>
+
+        <p>
+          Put the three axes on a plot. On one side, architectures that
+          maximize per-layer expressivity: TTT-MLP, complex recurrences,
+          nonlinear SSMs. On the other, architectures that maximize
+          hardware efficiency and training stability: gated DeltaNet,
+          Mamba2, GLA, simple gated linear recurrences with well-chosen
+          parameterizations.
+        </p>
+
+        <!-- TODO: maybe a figure here showing the Pareto frontier -->
+
+        <p>
+          As far as I can tell, the empirical Pareto frontier is not
+          centered. It appears biased toward the efficiency-stability
+          side. At the compute budgets where we have good comparisons,
+          the simple-but-stackable architectures tend to match or beat
+          the complex-but-expressive ones.
+          <!-- TODO: cite specific benchmark comparisons -->
+          If this pattern is real and not an artifact of where we have
+          looked, the bias-variance framing offers an explanation:
+          variance penalties compound with depth and data, while bias
+          penalties shrink as composition covers more of the function
+          space.
+        </p>
+
+        <p>
+          I want to be clear about two things. First, this is a
+          hypothesis, not a theorem. The evidence is suggestive but not
+          conclusive. We do not have controlled experiments across enough
+          scales and tasks to rule out confounds. Maybe the expressive
+          architectures have not been tuned as carefully. Maybe the
+          benchmarks we use do not stress the right capabilities. Maybe
+          the gap reverses at a scale no one has reached yet.
+        </p>
+
+        <p>
+          Second, I find this somewhat unfortunate. The expressivity
+          results are beautiful mathematics. The state tracking hierarchy
+          is elegant. The circuit complexity connections are deep. And
+          they are telling us something true about these architectures.
+          A single gated linear recurrence really cannot track a finite
+          group action. A fixed-depth transformer really is in
+          $\text{TC}^0$. These are facts, and they matter.
+        </p>
+
+        <p>
+          The question is whether "true" and "useful for predicting
+          which architecture wins at scale" are the same claim. My read
+          of the current evidence is that the theoretical gaps are real
+          but do not dominate the Pareto frontier, because the other two
+          axes compound with scale in ways that expressivity does not.
+          But I hold this view with moderate confidence. There is a
+          plausible world where expressivity bottlenecks emerge at
+          frontier scale, or where someone finds a layer that is
+          simultaneously expressive, efficient, and stable, and this
+          entire argument becomes a historical footnote.
+        </p>
+
+        <p>
+          Sutton's original bitter lesson is about search and learning
+          versus human knowledge. The version here is narrower but
+          structurally similar. Human knowledge about what computation
+          a sequence mixer should perform (state tracking, group actions,
+          serial composition) may be less important than giving the
+          system more compute to figure it out. And "giving the system
+          more compute" means, concretely, making each layer cheap enough
+          to stack deeply, stable enough to train at scale, and fast
+          enough to process data quickly. The expressivity follows from
+          depth, data, and chain-of-thought. It may not need to be
+          designed in.
+        </p>
+
+        <p>
+          I want this to be wrong. The alternative, that the field
+          converges on a few simple, well-engineered primitives and the
+          beautiful theory becomes a footnote, is the less interesting
+          outcome. But I think we should be cognizant of the story the
+          evidence is currently telling, even if we hope the next chapter
+          reads differently.
+        </p>
+
+        <h2 class="post-section">References</h2>
+
+        <!-- TODO: fill in references -->
+        <p class="post-ref">[1] <!-- TTT paper --></p>
+        <p class="post-ref">[2] <!-- Merrill & Sabharwal state tracking --></p>
+        <p class="post-ref">[3] <!-- Feng/Guo/Tengyu Ma CoT paper --></p>
+        <p class="post-ref">[4] <!-- DeltaNet / Gated DeltaNet --></p>
+        <p class="post-ref">[5] <!-- Mamba2 / GLA --></p>
+        <p class="post-ref">[6] <!-- Sutton's Bitter Lesson --></p>
+        <!-- TODO: add more references as needed -->
+
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/dhruvbpai" target="_blank" rel="noopener">github</a>
+        <a href="https://scholar.google.com/citations?user=b8KdzTYAAAAJ" target="_blank" rel="noopener">scholar</a>
+        <a href="https://linkedin.com/in/dhruvpai" target="_blank" rel="noopener">linkedin</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function() {
+      var theme = document.documentElement.getAttribute('data-theme') || 'dark';
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = theme === 'dark' ? 'light' : 'dark';
+      });
+    })();
+
+    function toggleTheme() {
+      var html = document.documentElement;
+      var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = next === 'dark' ? 'light' : 'dark';
+      });
+    }
+  </script>
+</body>
+</html>

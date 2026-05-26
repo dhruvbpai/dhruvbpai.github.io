@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Capacity vs Mixing in Associative Memory — Dhruv Pai</title>
+  <meta name="description" content="Associative recall as exact retrieval, and the tension between memory capacity and mixing in sequence models.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});"></script>
+  <script>
+    (function() {
+      var t = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="/" class="nav-name">Dhruv Pai</a>
+        <div class="nav-links">
+          <a href="/about/">about</a>
+          <a href="/blog/" class="active">blog</a>
+          <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"></button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="container">
+      <div class="post-header">
+        <h1 class="post-title">Capacity vs Mixing in Associative Memory</h1>
+        <div class="post-date">May 2026</div>
+      </div>
+
+      <div class="post-body">
+
+        <p>
+          Every sequence mixer can be viewed as an associative memory. You store $N$
+          key-value pairs $(k_i, v_i)$ and retrieve values given
+          queries. The Universal Hopfield Network [1] makes this
+          precise. You pick a similarity function
+          $\operatorname{sim}(q, k_i)$ and a separation function
+          $\operatorname{sep}$ that turns similarities into weights.
+        </p>
+
+        $$y(q) = \sum_{i=1}^{N} \operatorname{sep}\!\big(\operatorname{sim}(q, k_i)\big) \, v_i$$
+
+        <p>
+          Set $\operatorname{sim} = q^\top k$ and
+          $\operatorname{sep} = \operatorname{softmax}$. You get
+          attention. Set $\operatorname{sep} = \text{id}$ and you get
+          linear attention. Set $\operatorname{sep} = \text{ReLU}$ and
+          you get the kernel FFN layers use. The choice of kernel is
+          the whole game.
+        </p>
+
+        $$\text{Attn}(q, K, V) = \sum_{i=1}^{N} \frac{\exp(\beta \, q^\top k_i)}{\sum_j \exp(\beta \, q^\top k_j)} \, v_i$$
+
+        <p>
+          Softmax attention is a single-step Hopfield update [1] with
+          energy
+        </p>
+
+        $$E(q) = -\frac{1}{\beta} \log \sum_j \exp\!\left(\beta \, q^\top k_j\right)$$
+
+        <p>
+          Stored patterns sit at energy minima in the energy landscape.
+        </p>
+
+        <div class="post-figure">
+          <canvas id="energy-landscape"></canvas>
+          <div class="post-figure-caption">
+            Hopfield energy landscape. Drag stored patterns to reshape
+            the surface. Adjust $\beta$ to control basin sharpness.
+          </div>
+          <div class="walkthrough-controls">
+            <span id="beta-label" class="walk-label">β = 2.0</span>
+            <input type="range" id="beta-slider" min="0.3" max="8.0" step="0.1" value="2.0" style="width:200px">
+          </div>
+        </div>
+
+        <p>
+          What happens at finite $\beta$? Ramsauer et al. [1] identify
+          three regimes. Low $\beta$ averages globally over all stored
+          patterns. High $\beta$ converges to a single fixed point.
+          The interesting regime is in between, where the system
+          settles into metastable states that average over subsets
+          of nearby patterns.
+        </p>
+
+        <div class="post-figure">
+          <canvas id="energy-1d" class="canvas-2d"></canvas>
+          <div class="post-figure-caption">
+            Click anywhere to drop a query and watch it roll downhill
+            to the nearest attractor.
+          </div>
+        </div>
+
+        <h2 class="post-section">Smoothing is the feature</h2>
+
+        <p>
+          The standard question about an associative memory is
+          capacity. How many pairs can you store and retrieve
+          exactly? For linear attention [3], the memory is
+          $S = \sum_i v_i k_i^\top$ and querying decomposes into
+          signal plus interference.
+        </p>
+
+        $$Sq = \underbrace{v_j (k_j^\top k_j)}_{\text{signal}} + \underbrace{\sum_{i \neq j} v_i (k_i^\top k_j)}_{\text{noise}}$$
+
+        <p>
+          Exact retrieval requires orthogonal keys, limiting
+          capacity to $N \leq d_k$. JL-style arguments push this
+          to $\sim 2^{\epsilon d_k}$ at $\epsilon$-error. These
+          bounds all assume you want near-exact retrieval, but attention
+          almost never retrieves exactly.
+        </p>
+
+        <div class="post-figure">
+          <canvas id="attention-retrieval"></canvas>
+          <div class="post-figure-caption">
+            Softmax retrieval. Ghost bars show full values; solid bars
+            show weighted contributions. Increase $\beta$ to sharpen
+            retrieval from averaging toward lookup.
+          </div>
+          <div class="walkthrough-controls">
+            <span id="attn-beta-label" class="walk-label">β = 0.5</span>
+            <input type="range" id="attn-beta-slider" min="0.1" max="15.0" step="0.1" value="0.5" style="width:200px">
+          </div>
+        </div>
+
+        <p>
+          Transformers could learn exact retrieval by sending
+          $\|q\|_2 \to \infty$. In practice they don't. Attention
+          maps show smooth distributions over keys. The operating
+          regime that makes most heads useful is metastable.
+        </p>
+
+        <p>
+          Zhong et al. [2] provide a useful lens to compare the theoretical capacity of different associative memories. The separation function
+          $\kappa$ determines a retrieval SNR.
+        </p>
+
+        $$\text{SNR}_\kappa^{-1} = N \cdot \frac{\mathbb{E}_{k_j}\!\left[\kappa^2(k_j, k_i)\right]}{\kappa^2(k_i, k_i)}$$
+
+        <p>
+          This measures how much a random key leaks into the
+          target's retrieval.
+        </p>
+
+        <table class="post-table">
+          <thead>
+            <tr><th>Kernel $\kappa$</th><th>Used by</th><th>$\text{SNR}^{-1}$</th><th>Character</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Linear</td><td>Linear attention</td><td>$N / d_k$</td><td>Low precision, maximal superposition</td></tr>
+            <tr><td>ReLU</td><td>FFN layers</td><td>$\sim N / d_k^{1/2}$</td><td>Intermediate precision, polysemantic storage</td></tr>
+            <tr><td>Exponential</td><td>Softmax attention</td><td>$\sim N \cdot e^{-2d_k}$</td><td>High precision, monosemantic slots</td></tr>
+          </tbody>
+        </table>
+
+        <p>
+          Different kernels are different points on the precision-density
+          spectrum. The exp kernel gives clean, one-fact-per-slot
+          storage, while the ReLU kernel packs more knowledge into fewer
+          parameters through polysemantic superposition. However, the implicit assumption is that the soft regime is a
+          compromise. Lower precision is the necessary cost of denser storage,
+          and the ideal is still exact retrieval. I believe that framing
+          is incomplete.
+        </p>
+
+        <h2 class="post-section">Crosstalk vs interpolation</h2>
+
+        <p>
+          Not all interference is created equal. When a soft memory retrieves a
+          blend of values, two very different things could be happening.
+        </p>
+
+        <p>
+          The first is crosstalk. Keys collide in the kernel's similarity
+          metric but their values are semantically unrelated (or one value should take precedence over the other). This is precisely the interference that capacity analysis measures and
+          that delta-rule updates [4] try to correct. If $k_a \approx k_b$
+          but $v_a$ and $v_b$ point in unrelated directions, then any query
+          near $k_a$ retrieves a corrupted signal.
+        </p>
+
+        $$\hat{v} \approx \alpha \, v_a + (1 - \alpha) \, v_b$$
+
+        <p>
+          The $v_b$ term is pure error.
+        </p>
+
+        <p>
+          The second is semantic interpolation. Keys are nearby because their
+          values are genuinely related. The values lie on a locally smooth semantic
+          manifold.
+        </p>
+
+        $$v_i \approx f(k_i)$$
+
+        <p>
+          In this case, the weighted average is not failed retrieval but rather a useful smoothing. The output estimates $f(q)$ from a neighborhood
+          of stored samples, and the smoothing can actually improve the
+          estimate by averaging out noise or providing further contextual information. 
+        </p>
+
+        <p>
+          The same mathematical operation, but different alignment between the kernel's
+          notion of proximity and the structure of the stored values.
+        </p>
+
+        <div class="post-figure">
+          <canvas id="crosstalk-interpolation"></canvas>
+          <div class="post-figure-caption">
+            Left: interpolation -> aligned values blend coherently.
+            Right: crosstalk -> conflicting values produce noise.
+          </div>
+        </div>
+
+        <p>
+          The kernel regression view makes this precise. Softmax attention is an instance of the classical
+          Nadaraya-Watson estimator from nonparametric statistics. The bias of this estimator is small when $f$ is smooth
+          on the kernel's support. The variance decreases with more samples in
+          the neighborhood. Soft retrieval over a value-coherent
+          neighborhood does not sacrifice accuracy, but rather improves it.
+        </p>
+
+        <div class="post-figure">
+          <canvas id="kernel-smoothing" class="canvas-2d"></canvas>
+          <div class="post-figure-caption">
+            Kernel regression. Adjust bandwidth $h$ to see the
+            bias-variance tradeoff between smoothing and fidelity.
+          </div>
+          <div class="walkthrough-controls">
+            <span id="bandwidth-label" class="walk-label">h = 0.60</span>
+            <input type="range" id="bandwidth-slider" min="0.1" max="2.0" step="0.02" value="0.6" style="width:200px">
+          </div>
+        </div>
+
+        <h2 class="post-section">Smooth basins, high walls</h2>
+
+        <p>
+          The energy landscape makes the desiderata concrete. A good
+          associative memory needs two things simultaneously: smooth
+          basins within semantic regions, so related memories
+          interpolate, and high energy barriers between incompatible
+          regions, so unrelated values never blend.
+        </p>
+
+        <p>
+          We can formalize some version of this. Partition the stored patterns into
+          semantic clusters $\{C_1, \ldots, C_m\}$. Within each
+          cluster, values are compatible (blending is useful) and across
+          clusters, values conflict (blending is crosstalk). A good
+          energy landscape satisfies two conditions.
+        </p>
+
+        <p>
+          <b>Intra-cluster smoothness.</b> For patterns $k_a, k_b$ in
+          the same cluster, the energy surface should be smooth between
+          them. If $E$ is $L$-Lipschitz on the geodesic connecting
+          $k_a$ and $k_b$, then
+        </p>
+
+        $$|E(q) - E(q')| \leq L \|q - q'\| \quad \text{for } q, q' \in \operatorname{conv}(C_s)$$
+
+        <p>
+          Small $L$ means the basin floor is locally flat. A query anywhere
+          in the cluster's convex hull retrieves a smooth blend of
+          the cluster's values. This is the regime where metastable
+          averaging is useful.
+        </p>
+
+        <p>
+          <b>Inter-cluster separation.</b> Between clusters, the energy
+          barrier should be large. Define the barrier height between
+          clusters $C_s$ and $C_t$ as
+        </p>
+
+        $$B(C_s, C_t) = \min_{q \in \text{path}(C_s, C_t)} E(q) - \max\!\big(E^*(C_s),\, E^*(C_t)\big)$$
+
+        <p>
+          where $E^*(C_s)$ is the minimum energy within cluster $s$.
+          Large $B$ means a query must climb a significant energy hill
+          to cross from one basin to another. The softmax distribution
+          suppresses contributions from patterns on the far side of a
+          barrier exponentially in $\beta \cdot B$.
+        </p>
+
+        <div class="post-figure">
+          <canvas id="basin-walls"></canvas>
+          <div class="post-figure-caption">
+            Learned energy landscape with smooth basins and high
+            inter-cluster barriers. Drag to rotate.
+          </div>
+        </div>
+
+        <p>
+          What makes softmax attention powerful here is that it can
+          interpolate continuously between totally flat and totally
+          spiky. At $\beta = 0$ the landscape is a constant and every
+          pattern contributes equally. As $\beta$ grows, basins deepen
+          and barriers sharpen until at $\beta \to \infty$ each pattern
+          is an isolated delta. The learned $\beta = ||q||_2 ||k||_2/\sqrt{d_k}$
+          sits in the middle, and the learned key geometry determines
+          which regions of the landscape are smooth and which have
+          walls. This is a much richer parameterization than a fixed
+          kernel width.
+        </p>
+
+        <p>
+          End-to-end learning shapes this landscape. The model does
+          not just learn what to store. It learns where to put the
+          walls. Training carves valleys around clusters of compatible
+          memories and raises barriers between incompatible ones.
+          The kernel, key-value geometry, and temperature all co-adapt.
+        </p>
+
+        <p>
+          The Anthropic superposition work [5] makes a related point.
+          Models represent more features than they have dimensions by
+          tolerating interference.           That interference is not a defect but rather a necessary mechanism to achieve compression. The real question is whether the architecture
+          gives you enough control over which cross-terms survive.
+        </p>
+
+        <p>
+          Put another way, interference is only noise relative to an exact-recall
+          objective. Relative to abstraction, generalization, and
+          composition, controlled interference is the computation.
+        </p>
+
+        <h2 class="post-section">Architectural choices as landscape shaping</h2>
+
+        <p>
+          This perspective makes concrete predictions about why certain
+          architectural choices work. I selected, somewhat arbitrarily, three recent developments that illustrate the principles - 
+          fine-grained mixture-of-experts routing, sparse attention under
+          heavy key-value sharing, and channel-wise forget gates in linear
+          attention.
+        </p>
+
+        <p>
+          <b>Fine-grained MoE.</b> A mixture-of-experts layer partitions the
+          associative memory into $E$ sub-memories (experts), with a router
+          $g(x) \in \Delta^E$ selecting a sparse subset per token.
+          The output is
+        </p>
+
+        $$y = \sum_{e \in \text{TopK}(g(x))} g_e(x) \cdot f_e(x)$$
+
+        <p>
+          Through the energy landscape lens, routing erects hard barriers
+          between expert basins. Tokens assigned to expert $e$ never
+          interfere with memories stored in expert $e'$. Within each
+          expert, the FFN kernel still performs smooth mixing over its
+          stored associations. The architecture thus decouples two scales
+          of the landscape -> coarse-grained selectivity across experts
+          (suppressing crosstalk between unrelated knowledge clusters)
+          and fine-grained interpolation within each expert (preserving
+          useful superposition among related facts). Making experts
+          smaller and more numerous as in fine-grained MoE sharpens the inter-basin barriers
+          while keeping intra-basin smoothness.
+        </p>
+
+        <div class="post-figure">
+          <img src="/blog/associative-memory/deepseek-moe-fig2.png" alt="DeepSeekMoE fine-grained expert segmentation" style="max-width:100%;border-radius:6px;">
+          <div class="post-figure-caption">
+            Fine-grained expert segmentation [9]. Splitting $N$ experts
+            into $mN$ smaller ones and activating $mK$ increases
+            combinatorial flexibility while keeping compute constant.
+          </div>
+        </div>
+
+        <p>
+          <b>Sparse attention under GQA.</b> Grouped-query attention shares
+          each key-value head across $G$ query heads. As $G$ grows, the
+          keys must serve increasingly diverse queries, and the pressure on the associative memory grows. The energy landscape flattens as
+          margins $s(q, k_{i^*}) - s(q, k_j)$ shrink, and the
+          exponential kernel can no longer separate signal from
+          interference.
+        </p>
+
+        $$y = \underbrace{p_{i^*} v_{i^*}}_{\text{signal}} + \underbrace{\sum_{j \neq i^*} p_j \, v_j}_{\text{crosstalk that grows as margins shrink}}$$
+
+        <p>
+          In our work Sparsity is Cool [7], we analyzed this phenomenon. Sparse attention zeros out the low-relevance terms
+          entirely by selecting only the top-scoring key blocks per
+          query. In the energy landscape, this erects infinite barriers
+          around irrelevant basins, restricting retrieval to a
+          neighborhood where the kernel can still discriminate.
+        </p>
+
+        <div class="post-figure">
+          <canvas id="sparse-attn-eval" class="canvas-2d"></canvas>
+          <div class="post-figure-caption">
+            Sparse attention (MoBA, NSA) outperforms dense attention
+            most strongly under heavy KV sharing. Data from [7].
+          </div>
+        </div>
+
+        <p>
+          Under MQA (1 KV head, 16 query heads), both MoBA and NSA
+          beat the dense transformer by a wide margin, while under MHA
+          (16 KV heads) the gap narrows because head-specific keys
+          already provide well-separated basins. The t-SNE geometry of
+          key vectors confirms the mechanism -> under MQA, the key cloud
+          is nearly isotropic and queries must snake around it, making
+          sparse block selection the means by which heads achieve
+          diverse retrieval behavior despite sharing a single key set.
+        </p>
+
+        <p>
+          <b>Channel-wise forget gates and the delta rule.</b> In recurrent
+          associative memories, the state $S_t \in \mathbb{R}^{d_k \times d_v}$
+          accumulates key-value associations over time. The simplest update is
+          additive Hebbian learning rule.
+        </p>
+
+        $$S_t = S_{t-1} + v_t k_t^\top$$
+
+        <p>
+          This is linear attention's outer-product accumulation [3]. Every
+          new association adds to the existing superposition, which monotonically
+          increases interference. The delta rule [4] corrects existing
+          associations before writing:
+        </p>
+
+        $$S_t = S_{t-1} + \beta_t(v_t - S_{t-1} k_t) k_t^\top$$
+
+        <p>
+          The correction term $-\beta_t S_{t-1} k_t k_t^\top$ is a rank-one
+          update that evicts the current value stored at $k_t$ before writing
+          the new one. In the energy landscape, this deepens the basin around
+          $k_t$ by eliminating the crosstalk residual from stale associations.
+        </p>
+
+        <p>
+          KDA [6] and RWKV-7 [8] extend this further by replacing the scalar decay
+          with a diagonal forget gate $\Lambda_t = \text{diag}(\alpha_t)$
+          where $\alpha_t \in [0,1]^{d_k}$:
+        </p>
+
+        $$S_t = (\Lambda_t \otimes I_{d_v}) \, S_{t-1} + \beta_t v_t k_t^\top$$
+
+        <p>
+          Each feature dimension now has an independent forgetting rate. This
+          is a much richer operation on the energy landscape than scalar decay.
+          Dimensions encoding transient context (syntactic role, local position)
+          can decay rapidly, collapsing those axes of the landscape and
+          sharpening retrieval along them. Dimensions encoding persistent
+          semantics can decay slowly, maintaining broad basins that support
+          interpolation. The channel-wise gate gives the model per-dimension
+          control over the barrier height in the memory's energy surface, which can help explain why diagonal forget gates achieve so much stronger empirical results than their scalar counterparts. 
+        </p>
+
+        <p>
+          Architectural advances that improve
+          language modeling tend to give the memory finer-grained
+          control over which cross-terms to preserve and which to suppress, in an end-to-end learnable fashion. 
+          Exact-recall capacity is a special case, but not necessarily the
+          operating regime that matters. What matters is the ability to shape
+          the landscape so that the right things blend and the wrong things
+          don't.
+        </p>
+
+        <h2 class="post-section">References</h2>
+
+        <p class="post-ref">[1] Ramsauer et al., <a href="https://arxiv.org/abs/2008.02217" target="_blank" rel="noopener">"Hopfield Networks is All You Need"</a>, ICLR 2021.</p>
+        <p class="post-ref">[2] Zhong, Xu, Ao, Shi, <a href="https://arxiv.org/abs/2505.19488" target="_blank" rel="noopener">"Understanding Transformer from the Perspective of Associative Memory"</a>, arXiv 2025.</p>
+        <p class="post-ref">[3] Schlag et al., <a href="https://proceedings.mlr.press/v139/schlag21a.html" target="_blank" rel="noopener">"Linear Transformers Are Secretly Fast Weight Programmers"</a>, ICML 2021.</p>
+        <p class="post-ref">[4] Yang et al., <a href="https://openreview.net/forum?id=y8Rm4VNRPH" target="_blank" rel="noopener">"Parallelizing Linear Transformers with the Delta Rule over Sequence Length"</a>, NeurIPS 2024.</p>
+        <p class="post-ref">[5] Elhage et al., <a href="https://transformer-circuits.pub/2022/toy_model/index.html" target="_blank" rel="noopener">"Toy Models of Superposition"</a>, Anthropic 2022.</p>
+        <p class="post-ref">[6] Kimi Team, <a href="https://arxiv.org/abs/2510.26692" target="_blank" rel="noopener">"Kimi Linear: An Expressive, Efficient Attention Architecture"</a>, arXiv 2025.</p>
+        <p class="post-ref">[7] Pai, Averbuch, Wang, Keigwin, <a href="https://blog.tilderesearch.com/blog/sparse-attn" target="_blank" rel="noopener">"Sparsity is Cool"</a>, Tilde Research 2025.</p>
+        <p class="post-ref">[8] Peng et al., <a href="https://arxiv.org/abs/2503.14456" target="_blank" rel="noopener">"RWKV-7 'Goose' with Expressive Dynamic State Evolution"</a>, arXiv 2025.</p>
+        <p class="post-ref">[9] Dai et al., <a href="https://arxiv.org/abs/2401.06066" target="_blank" rel="noopener">"DeepSeekMoE: Towards Ultimate Expert Specialization in Mixture-of-Experts Language Models"</a>, ACL 2024.</p>
+
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/dhruvbpai" target="_blank" rel="noopener">github</a>
+        <a href="https://scholar.google.com/citations?user=b8KdzTYAAAAJ" target="_blank" rel="noopener">scholar</a>
+        <a href="https://linkedin.com/in/dhruvpai" target="_blank" rel="noopener">linkedin</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function() {
+      var theme = document.documentElement.getAttribute('data-theme') || 'dark';
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = theme === 'dark' ? 'light' : 'dark';
+      });
+    })();
+
+    function toggleTheme() {
+      var html = document.documentElement;
+      var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = next === 'dark' ? 'light' : 'dark';
+      });
+    }
+  </script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="/blog/associative-memory/diagrams.js"></script>
+  <script src="/blog/associative-memory/canvas2d.js"></script>
+</body>
+</html>
