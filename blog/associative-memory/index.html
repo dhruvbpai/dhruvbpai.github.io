@@ -173,7 +173,7 @@
           spectrum. The exp kernel gives clean, one-fact-per-slot
           storage, while the ReLU kernel packs more knowledge into fewer
           parameters through polysemantic superposition. However, the implicit assumption is that the soft regime is a
-          compromise. Lower precision is the necessary cost of denser storage,
+          compromise! Lower precision is the necessary cost of denser storage,
           and the ideal is still exact retrieval. I believe that framing
           is incomplete.
         </p>
@@ -186,7 +186,7 @@
         </p>
 
         <p>
-          The first is crosstalk. Keys collide in the kernel's similarity
+          The first option is crosstalk. Keys collide in the kernel's similarity
           metric but their values are semantically unrelated (or one value should take precedence over the other). This is precisely the interference that capacity analysis measures and
           that delta-rule updates [4] try to correct. If $k_a \approx k_b$
           but $v_a$ and $v_b$ point in unrelated directions, then any query
@@ -200,7 +200,7 @@
         </p>
 
         <p>
-          The second is semantic interpolation. Keys are nearby because their
+          The second option is semantic interpolation. Keys are nearby because their
           values are genuinely related. The values lie on a locally smooth semantic
           manifold.
         </p>
@@ -208,7 +208,7 @@
         $$v_i \approx f(k_i)$$
 
         <p>
-          In this case, the weighted average is not failed retrieval but rather a useful smoothing. The output estimates $f(q)$ from a neighborhood
+          In the semantic interpolation case, the weighted average is not failed retrieval but rather a useful smoothing. The output estimates $f(q)$ from a neighborhood
           of stored samples, and the smoothing can actually improve the
           estimate by averaging out noise or providing further contextual information. 
         </p>
@@ -229,9 +229,9 @@
         <p>
           The kernel regression view makes this precise. Softmax attention is an instance of the classical
           Nadaraya-Watson estimator from nonparametric statistics. The bias of this estimator is small when $f$ is smooth
-          on the kernel's support. The variance decreases with more samples in
+          on the kernel's support but the variance decreases with more samples in
           the neighborhood. Soft retrieval over a value-coherent
-          neighborhood does not sacrifice accuracy, but rather improves it.
+          neighborhood does not necessarily sacrifice accuracy, and can actually improve it.
         </p>
 
         <div class="post-figure">
@@ -311,24 +311,22 @@
           pattern contributes equally. As $\beta$ grows, basins deepen
           and barriers sharpen until at $\beta \to \infty$ each pattern
           is an isolated delta. The learned $\beta = ||q||_2 ||k||_2/\sqrt{d_k}$
-          sits in the middle, and the learned key geometry determines
+          sits in the middle of the two extremesand the learned key geometry determines
           which regions of the landscape are smooth and which have
-          walls. This is a much richer parameterization than a fixed
+          walls. This is a much richer and more expressive parameterization than simply a fixed
           kernel width.
         </p>
 
         <p>
-          End-to-end learning shapes this landscape. The model does
-          not just learn what to store. It learns where to put the
-          walls. Training carves valleys around clusters of compatible
-          memories and raises barriers between incompatible ones.
-          The kernel, key-value geometry, and temperature all co-adapt.
+          The landscape is shaped by end-to-end learning. The model learns where to put the
+          walls and basins, for fast-weights in an input-dependent fashion.
+          The kernel, key-value geometry, and queries all co-adapt.
         </p>
 
         <p>
           The Anthropic superposition work [5] makes a related point.
           Models represent more features than they have dimensions by
-          tolerating interference.           That interference is not a defect but rather a necessary mechanism to achieve compression. The real question is whether the architecture
+          tolerating interference, which is a necessary mechanism to achieve compression. The real question is whether the architecture
           gives you enough control over which cross-terms survive.
         </p>
 
