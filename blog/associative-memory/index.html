@@ -447,7 +447,7 @@
           where $\alpha_t \in [0,1]^{d_k}$:
         </p>
 
-        $$S_t = (\Lambda_t \otimes I_{d_v}) \, S_{t-1} + \beta_t v_t k_t^\top$$
+        $$S_t = (I-\beta_t k_t k_t^\top)\Lambda_t \, S_{t-1} + \beta_t v_t k_t^\top$$
 
         <p>
           Each feature dimension now has an independent forgetting rate. This
