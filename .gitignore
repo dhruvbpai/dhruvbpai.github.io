@@ -2,4 +2,7 @@ _site/
 .DS_Store
 node_modules/
 .env
+.venv/
 claude.md
+*.npz
+.venv/

@@ -407,6 +407,17 @@ section h2 {
   margin-bottom: 24px;
 }
 
+.post-question {
+  font-size: 1.15rem;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--fg);
+  margin-bottom: 32px;
+  padding: 20px 24px;
+  border-left: 2px solid var(--light);
+  transition: border-color 0.3s ease;
+}
+
 .post-section {
   font-size: 1.1rem;
   font-weight: 600;
@@ -536,6 +547,92 @@ section h2 {
   color: var(--gray);
   min-width: 60px;
   text-align: center;
+}
+
+.widget-controls {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.widget-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.8rem;
+  color: var(--gray);
+}
+
+.widget-row label {
+  color: var(--light);
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.widget-row input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 160px;
+  height: 1px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+}
+
+.widget-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--fg);
+  cursor: pointer;
+}
+
+.widget-row input[type="range"]::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--fg);
+  border: none;
+  cursor: pointer;
+}
+
+.widget-row span {
+  font-family: var(--font);
+  min-width: 3em;
+}
+
+.widget-input {
+  font-family: var(--font);
+  font-size: 0.8rem;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 4px 8px;
+  width: 200px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.widget-input:focus {
+  border-color: var(--fg);
+}
+
+.phase-tooltip {
+  display: none;
+  position: absolute;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  font-family: var(--font);
+  font-size: 0.75rem;
+  color: var(--gray);
+  pointer-events: none;
+  z-index: 10;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
 /* ─── Footer ─── */

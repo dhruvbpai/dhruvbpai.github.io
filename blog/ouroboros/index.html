@@ -42,29 +42,33 @@
       </div>
 
       <div class="post-body">
+        <p class="post-question">
+          What happens if you take a model's loss curve, rescale it into a
+          learning rate schedule, and use it to train the next run? And then
+          repeat forever?
+        </p>
+
         <div class="post-figure">
           <canvas id="ouroboros-diagram"></canvas>
-          <div class="post-figure-caption">Click and drag to rotate. Scroll to zoom.</div>
+          <div class="post-figure-caption">Click and drag to rotate the Ouroboros.</div>
         </div>
 
         <p>
-          Sometimes it's fun to ask ridiculous quesitions. For example, what if we take the loss curve from a training run, rescale it
-          into a valid learning rate range, and use it as the schedule for the next run?
-          Then do it again. And again. The loss curve eats its own tail (hence Ouroborous). Each generation's
-          output becomes the next generation's input through LR scheduling, forming a bizarre dynamical system over
-          the space of LR schedules.
+          Sometimes it's fun to ask ridiculous quesitions. As an example, what if we take the loss curve from a training run, rescale it
+          into a valid learning rate schedule, and use it as the schedule for the next run?
+          And then we repeat this process ad infinitum, forming a fixed function map. The loss curve "eats" its own tail (hence Ouroborous) and each generation's
+          output becomes the next generation's input through LR scheduling. We get this bizarre dynamical system over
+          the space of LR schedules, and I spent last night looking at the eovlution of this system. 
         </p>
 
         <p>
-          Let's walk through what happens. We start with a standard warmup-stable-decay
-          schedule. The model trains well, loss drops like a power law. Now we rescale
-          that loss curve into an LR range. Since the loss decayed to near zero,
+          Let's walk through an example. We start with a standard warmup-stable-decay (WSD)
+          schedule. The model trains well and loss drops like a power law. When training is done, we rescale
+          that loss curve into an LR range for the next run. Since the loss decayed to near zero,
           the resulting schedule starts high but quickly falls to almost nothing.
-          Training with that schedule barely moves the model. The loss stays high.
-          But a high, flat loss curve becomes a high, flat LR schedule. So the
-          next generation actually converges again. Then the cycle repeats. The
-          system oscillates between "good schedule, good convergence" and "bad
-          schedule, bad convergence" before (sometimes) settling into a fixed point.
+          Training with that schedule barely moves the model, since the model spends most of learning at very low LR. As a result, the loss stays high for this iteration.
+          However, high, flat loss curve becomes a high, flat LR schedule, which allows the
+          next generation to actually converge again. And this cycle may repeat infinitely, or diverge! It's a really interesting problem, and it's nontrivial whether the system converges to a fixed point, a limit cycle, or full on chaos. 
         </p>
 
         <div class="post-figure">
@@ -79,10 +83,10 @@
         <h2 class="post-section">Formalizing the problem</h2>
 
         <p>
-          We need some notation. Suppose we have a model with parameters $\theta$
-          trained by gradient descent on a loss $\mathcal{L}$. Given a learning rate
-          schedule $\eta : [0, T] \to \mathbb{R}_{>0}$, the training dynamics produce
-          a loss curve $L : [0, T] \to \mathbb{R}_{\geq 0}$ defined by
+          Surprisingly, we can benefit nontrivially from formalizing this absurd problem. Suppose we have a model with parameters $\theta$
+          trained by vanilla gradient descent on a loss $\mathcal{L}$. Given a learning rate
+          schedule $\eta : [0, T] \to \mathbb{R}_{>0}$ which maps from timestep to LR, the training dynamics produce
+          a unique loss curve $L : [0, T] \to \mathbb{R}_{\geq 0}$ defined by
         </p>
 
         $$L(t) = \mathcal{L}(\theta(t))$$
@@ -101,7 +105,7 @@
         $$\mathcal{F} : \eta(\cdot) \mapsto L(\cdot)$$
 
         <p>
-          Now we need the other half of the loop. The rescaling operator
+         For the other half ot the loop, the rescaling operator
           $\mathcal{R}$ takes a loss curve and produces a learning rate schedule
           by normalizing it into a target range $[\eta_{\min}, \eta_{\max}]$.
         </p>
@@ -109,8 +113,8 @@
         $$\mathcal{R}[L](t) = \eta_{\min} + (\eta_{\max} - \eta_{\min}) \cdot \frac{L(t) - L_{\min}}{L_{\max} - L_{\min}}$$
 
         <p>
-          where $L_{\min} = \min_t L(t)$ and $L_{\max} = \max_t L(t)$. High loss
-          maps to high learning rate, low loss maps to low learning rate.
+          where $L_{\min} = \min_t L(t)$ and $L_{\max} = \max_t L(t)$. Intuitively, high loss
+          maps to high learning rate and low loss maps to low learning rate.
         </p>
 
         <p>
@@ -123,11 +127,11 @@
         <p>
           A fixed point of this iteration is a schedule $\eta^*$ satisfying
           $\eta^* = \mathcal{R} \circ \mathcal{F}[\eta^*]$. In other words,
-          a schedule whose loss curve, when rescaled, reproduces itself exactly.
+          a schedule whose loss curve, when rescaled, reproduces itself exactly!
         </p>
 
         <p>
-          Notice something useful. The schedule enters the dynamics only through
+          Critically, the schedule enters the dynamics only through
           the integrated schedule $A(t) = \int_0^t \eta(\tau) \, d\tau$. This means
           $\dot{A}(t) = \eta(t)$, so at a fixed point we get an ODE
         </p>
@@ -137,19 +141,19 @@
         <p>
           where $\mathcal{F}_A$ writes the loss as a function of the
           cumulative schedule $A$ rather than time directly.
-          This is a first-order autonomous ODE in $A$, which is a much nicer
-          object to study than a functional fixed-point equation.
+          This is a first-order autonomous ODE in $A$, which is a tractable 
+          object to study as opposed to our original functional fixed-point equation.
         </p>
 
         <h2 class="post-section">Example 1: Linear autoencoder</h2>
 
         <p>
-          Let's find a setting where $\mathcal{F}$ has a closed form. Consider
+          In the linear autoencoder case, we will show $\mathcal{F}$ has a closed form. Consider
           data $x \sim \mathcal{N}(0, \Sigma)$ with covariance
           $\Sigma = U \operatorname{diag}(\lambda_1, \dots, \lambda_d) U^\top$
           where $\lambda_1 \geq \lambda_2 \geq \cdots \geq \lambda_d > 0$.
-          Our model is a linear autoencoder $\hat{x} = W^\top W x$ with
-          $W \in \mathbb{R}^{k \times d}$, so the bottleneck has rank $k$.
+          Our model is a rank-k linear autoencoder $\hat{x} = W^\top W x$ with
+          $W \in \mathbb{R}^{k \times d}$.
           The MSE loss is
         </p>
 
@@ -157,10 +161,10 @@
 
         <p>
           This is the setting analyzed by Baldi &amp; Hornik (1989) and
-          Saxe et al. (2014). The key insight is that in the eigenbasis of
+          Saxe et al. (2014). The key insight is that the dynamics decouple in the eigenbasis of
           $\Sigma$, the dynamics decouple. Each eigenmode $i$ has a projection
           strength $p_i(t) \in [0, 1]$ measuring how much of eigendirection $i$
-          the network has captured. The loss decomposes as
+          the network has captured. The loss decomposes into the sum of the losses for each eigenmode.
         </p>
 
         $$L(t) = \frac{1}{2} \sum_{i=1}^{d} \lambda_i \left(1 - p_i(t)\right)^2$$
@@ -173,19 +177,19 @@
         $$\dot{p}_i = 2\eta(t) \, \lambda_i \, p_i(1 - p_i)$$
 
         <p>
-          This has an exact solution. Since the right-hand side factors as
+           Since the right-hand side factors as
           $\eta(t)$ times a function of $p_i$ alone, the schedule enters only
           through the integrated schedule $A(t) = \int_0^t \eta(\tau) \, d\tau$
-          just as we hoped.
+          as desired.
         </p>
 
         $$p_i(t) = \sigma\!\left(2\lambda_i A(t) + \operatorname{logit}(p_i(0))\right)$$
 
         <p>
-          where $\sigma$ is the sigmoid and
-          $\operatorname{logit}(p) = \log(p/(1-p))$. Each mode traces out a
+          where $\sigma$ is the sigmoid function and
+          $\operatorname{logit}(p) = \log(p/(1-p))$. Intuitively, each mode follows a
           sigmoid in the cumulative schedule $A$, with rate proportional to its
-          eigenvalue $\lambda_i$. Big eigenvalues get learned first. Small ones
+          eigenvalue $\lambda_i$. Big eigenvalues get learned first while small ones
           take exponentially longer.
         </p>
 
@@ -197,24 +201,129 @@
 
         <p>
           where $c_i = \operatorname{logit}(p_i(0))$ and
-          $A(t) = \int_0^t \eta(\tau) \, d\tau$. This is $\mathcal{F}$
-          written explicitly as a function of the schedule. It is a sum of
-          squared sigmoid tails, each indexed by an eigenvalue.
+          $A(t) = \int_0^t \eta(\tau) \, d\tau$. $\mathcal{F}$ is explicitly a function of the schedule, and is a sum of
+          squared sigmoid tails each indexed by an eigenvalue.
         </p>
 
         <p>
           The ouroboros iteration $\eta^{(n+1)} = \mathcal{R} \circ \mathcal{F}[\eta^{(n)}]$
-          is now fully computable. And the fixed-point ODE becomes
+          is now fully computabl and the fixed-point ODE becomes
         </p>
 
         $$\dot{A} = \eta_{\min} + (\eta_{\max} - \eta_{\min}) \cdot \frac{g(A) - g_{\min}}{g_{\max} - g_{\min}}$$
 
         <p>
           where $g(A) = \frac{1}{2} \sum_i \lambda_i (1 - \sigma(2\lambda_i A + c_i))^2$
-          is the loss as a function of the cumulative schedule. This is a separable
-          first-order ODE. The right-hand side is a known function of $A$ alone, so
-          we can solve it (at least numerically) and study its fixed points directly.
+          is the loss as a function of the cumulative schedule. Since this is a separable
+          first-order ODE and the right-hand side is a known function of $A$ alone,
+          we can solve it (at least numerically) and study its fixed points directly!
         </p>
+
+        <p>
+          To see why the linear case converged to a fixed point, observe 
+          that $g(A)$ is monotonically decreasing. Since more learning generally means lower loss, $\mathcal{R}[g(A)]$ maps high-$A$ regions to low LR and
+          low-$A$ regions to high LR -> which is a contraction. Intuitively, if the current
+          schedule overshoots (converges too fast), the resulting loss curve is
+          low, producing a low-LR schedule next round that undershoots. The
+          overshoot shrinks each generation because the map is smooth and the
+          composition $\mathcal{R} \circ \mathcal{F}$ has bounded derivative less
+          than 1 in the relevant regime, and so the oscillations damp out and the
+          iteration converges.
+        </p>
+
+        <p>
+          Below is an interactive widget to verify this yourself. If you adjust the eigenvalue spectrum and LR
+          range below, you will see fixed point convergence. The right panel shows
+          the L2 distance between consecutive schedules, which should decay
+          geometrically according to our theory.
+        </p>
+
+        <div class="post-figure">
+          <canvas id="linear-widget"></canvas>
+          <div class="widget-controls">
+            <div class="widget-row">
+              <label>eigenvalues</label>
+              <input type="text" id="widget-eigenvalues" value="1.0, 0.6, 0.3, 0.1" class="widget-input">
+            </div>
+            <div class="widget-row">
+              <label>$\eta_{\max}$</label>
+              <input type="range" id="widget-lr-max" min="0.005" max="0.15" step="0.005" value="0.05">
+              <span id="widget-lr-max-val">0.050</span>
+            </div>
+            <div class="widget-row">
+              <button class="descent-btn" id="widget-play">▶ play</button>
+              <button class="descent-btn" id="widget-reset">reset</button>
+              <span id="widget-gen-counter" class="walk-label">gen 0</span>
+            </div>
+          </div>
+        </div>
+
+        <p>
+           $\eta_{\max}$ (y-axis) vsthe spectral
+          condition number $\lambda_1 / \lambda_k$ (x-axis). Darker color means faster convergence to fixed point.
+        </p>
+
+        <div class="post-figure">
+          <canvas id="linear-landscape"></canvas>
+          <div class="post-figure-caption">
+            Convergence rate landscape for linear case. Color = generations to reach $\|\eta^{(n)} - \eta^{(n-1)}\|_2 &lt; 10^{-4}$.
+          </div>
+        </div>
+
+        <h2 class="post-section">Example 2: Nonlinear autoencoder</h2>
+
+        <p>
+          The linear case is clean but a bit boring. Every configuration converges
+          to a fixed point, so the map does not have interesting behavior. When we add nonlinearity, the story changes entirely. We replace the
+          linear autoencoder with a ReLU network ($6 \to 12 \to 2 \to 12 \to 6$)
+          and use full-batch gradient descent on the same fixed Gaussian dataset.
+          The resulting system no longer has a closed form for $\mathcal{F}$, and so we must study it numerically.
+        </p>
+
+        <p>
+         The loss landscape has non-smooth regions from
+          ReLU, so high learning rates can cause loss spikes, which feed
+          back as high-LR regions in the next schedule and potentially cause more spikes. Since Tte map $\mathcal{R} \circ \mathcal{F}$
+          can have derivative greater than 1, the iteration can oscillate
+          permanently or behave chaotically.
+        </p>
+
+        <p>
+          We run numerical simulations to study the behavior of the system, and granularly sweep two hyperparameters. The rescaling
+          operator gets a power-law exponent $\gamma$ that controls how aggressively
+          loss maps to LR ($\gamma = 1$ is linear, $\gamma > 1$ amplifies high-loss regions), We sweep $\gamma$ against $\eta_{\max}$ and classify
+          each pixel by its long-run behavior.
+        </p>
+
+        <div class="post-figure" style="position:relative">
+          <canvas id="phase-diagram"></canvas>
+          <button class="descent-btn" id="phase-reset-zoom" style="position:absolute;top:8px;right:8px;font-size:0.7rem;padding:4px 10px">reset zoom</button>
+          <div id="phase-tooltip" class="phase-tooltip"></div>
+          <div class="post-figure-caption">
+            Phase diagram of the nonlinear ouroboros.
+          </div>
+        </div>
+
+        <p>
+          The boundary between fixed points and limit cycles may remind one of fractal behavior one may find in the mandelbrot set or other iterated maps.  The ouroboros is a function iteration
+          on the infinite-dimensional space of LR schedules, and the
+          transition to chaos follows the same period-doubling route that
+          Feigenbaum described for scalar maps. The only difference is that our
+          "map" involves training a neural network, and so the nonlinearity comes
+          from the loss landscape and training dynamics rather than from a simple polynomial.
+        </p>
+
+        <p>
+          As far as an exercise in free will goes, I found the dynamics produced by the ouroboros to be beautiful. It's also nice that thelinear case has a clsoed form solution
+          with clean contraction. The nonlinear case
+          gives us period doubling, chaos, and fractal phase boundaries.
+        </p>
+
+        <h2 class="post-section">References</h2>
+
+        <p class="post-ref">[1] Baldi, Hornik, <a href="https://doi.org/10.1016/0893-6080(89)90014-2" target="_blank" rel="noopener">"Neural Networks and Principal Component Analysis: Learning from Examples Without Local Minima"</a>, Neural Networks 1989.</p>
+        <p class="post-ref">[2] Saxe, McClelland, Ganguli, <a href="https://arxiv.org/abs/1312.6120" target="_blank" rel="noopener">"Exact solutions to the nonlinear dynamics of learning in deep linear networks"</a>, ICLR 2014.</p>
+        <p class="post-ref">[3] Feigenbaum, <a href="https://doi.org/10.1007/BF01020332" target="_blank" rel="noopener">"Quantitative universality for a class of nonlinear transformations"</a>, J. Stat. Phys. 1978.</p>
 
       </div>
     </div>
@@ -240,6 +349,8 @@
   </script>
   <script type="module" src="/blog/ouroboros/diagram.js"></script>
   <script src="/blog/ouroboros/walkthrough.js"></script>
+  <script src="/blog/ouroboros/linear-widget.js"></script>
+  <script src="/blog/ouroboros/phase-viewer.js"></script>
   <script>
     (function() {
       var theme = document.documentElement.getAttribute('data-theme') || 'dark';
