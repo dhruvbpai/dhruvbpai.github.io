@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>(n, k)-Local Polynomial Simplicial Attention — Dhruv Pai</title>
+  <meta name="description" content="A two-axis family of attention mechanisms: simplex order n controls what the datapoints are, local polynomial degree k controls what you fit to them.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});"></script>
+  <script>
+    (function() {
+      var t = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+  <style>
+    /* In-text citation markers */
+    .post-body a.cite { color: var(--gray); font-size: 0.85em; }
+    .post-body a.cite::after { display: none; }
+    .post-body a.cite:hover { color: var(--fg); }
+
+    /* (n, k) family grid */
+    .nk-grid {
+      display: grid;
+      grid-template-columns: auto repeat(3, 1fr);
+      gap: 6px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .nk-corner, .nk-head, .nk-tick {
+      display: flex; align-items: center; justify-content: center;
+      color: var(--gray); font-size: 0.75rem;
+    }
+    .nk-cell {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 4px;
+      border: 1px solid var(--border); border-radius: 2px;
+      padding: 16px 8px; text-align: center; cursor: pointer; color: var(--fg);
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+    .nk-cell:hover { border-color: var(--light); }
+    .nk-cell.sel { border-color: var(--fg); background: var(--border); }
+    .nk-cell-coord { font-size: 0.8rem; font-weight: 600; }
+    .nk-cell-name { font-size: 0.68rem; color: var(--gray); }
+    .nk-panel {
+      margin-top: 24px; padding: 18px 20px;
+      border: 1px solid var(--border); border-radius: 2px; min-height: 70px;
+    }
+    .nk-panel-name { font-size: 0.85rem; font-weight: 600; color: var(--fg); margin-bottom: 6px; }
+    .nk-panel-math { font-size: 0.9rem; color: var(--fg); overflow-x: auto; }
+    .nk-panel-math .katex-display { margin: 12px 0; }
+
+    /* Shared viz controls */
+    .viz-controls {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+      gap: 18px; margin-top: 14px;
+    }
+    .viz-group { display: flex; align-items: center; gap: 8px; }
+    .viz-group-label { font-size: 0.78rem; color: var(--light); }
+    .descent-btn.sel { border-color: var(--fg); background: var(--fg); color: var(--bg); }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="/" class="nav-name">Dhruv Pai</a>
+        <div class="nav-links">
+          <a href="/about/">about</a>
+          <a href="/blog/" class="active">blog</a>
+          <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"></button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="container">
+      <div class="post-header">
+        <h1 class="post-title">(n, k)-Local Polynomial Simplicial Attention</h1>
+        <div class="post-date">June 2026</div>
+      </div>
+
+      <div class="post-body">
+
+        <p class="post-question">
+          Softmax attention is local constant regression on tokens. What if the datapoints are not tokens but
+          pairs or triples of tokens + what if you fit something richer than a
+          constant?
+        </p>
+
+        <p>
+          Attention is a regression
+          problem over the key-value pairs in context <a class="cite" href="#ref-1">[1]</a>. Softmax is the local constant
+          estimator (Nadaraya-Watson), LLA <a class="cite" href="#ref-2">[2]</a> upgrades it to a local linear fit, and our recent work on Parallax <a class="cite" href="#ref-3">[3]</a> replaces
+          LLA's per-token solve with a learned probe into the local KV covariance. In this work we will generalize along the axes of the fit and the data. 
+
+        </p>
+
+        <table class="post-table">
+          <thead>
+            <tr><th>Mechanism</th><th>Simplex order $n$</th><th>Regression degree $k$</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Softmax attention</td><td>$1$</td><td>$0$</td></tr>
+            <tr><td>LLA</td><td>$1$</td><td>$1$</td></tr>
+            <tr><td>Parallax</td><td>$1$</td><td>learned approx. to $1$</td></tr>
+            <tr><td>2-simplicial attention</td><td>$2$</td><td>$0$</td></tr>
+            <tr><td>2-simplicial Parallax</td><td>$2$</td><td>learned approx. to $1$</td></tr>
+            <tr><td>General object</td><td>$n$</td><td>$k$</td></tr>
+          </tbody>
+        </table>
+
+        <p>
+          The first axis is simplex order $n$. It decides whether a datapoint in our regression problem is a
+          token, a token-pair, a triple, or an $n$-tuple. The second axis is regression
+          degree $k$. It decides whether you fit a local constant, a local linear fit, a local quadratic fit, and so
+          on. Below we examine the cross-product of these two choices.
+        </p>
+
+        <div class="post-figure">
+          <div class="nk-grid" id="nk-grid" role="group" aria-label="Grid of simplex order n versus regression degree k"></div>
+          <div class="nk-panel" id="nk-panel">
+            <div class="nk-panel-name" id="nk-panel-name"></div>
+            <div class="nk-panel-math" id="nk-panel-math"></div>
+          </div>
+          <div class="post-figure-caption">Click a cell to see the closed form for that $(n, k)$.</div>
+        </div>
+
+        <h2 class="post-section">Lifting attention onto simplices</h2>
+
+        <p>
+          Start with the $n$ axis and leave $k = 0$. Fix a query $i$ and let
+          $J = (j_1, \dots, j_n)$ index an $n$-tuple of context tokens. The set of
+          admissible tuples $\mathcal{C}_i^{(n)}$ is the simplicial memory, with the
+          query sitting as the extra vertex.
+        </p>
+
+        <p>
+          Each tuple needs one key and one value, and so we lift the per-token keys and values through a map.
+        </p>
+
+        $$\phi_J = \Phi\big(k^{(1)}_{j_1}, \dots, k^{(n)}_{j_n}\big), \qquad u_J = U\big(v^{(1)}_{j_1}, \dots, v^{(n)}_{j_n}\big)$$
+
+        <p>
+          The cheap version takes Hadamard products instead of a general tensor map, though there are many other choices of admissible map.
+        </p>
+
+        $$\phi_J = k^{(1)}_{j_1} \odot \cdots \odot k^{(n)}_{j_n}, \qquad u_J = v^{(1)}_{j_1} \odot \cdots \odot v^{(n)}_{j_n}$$
+
+        <p>
+          This diagonal lift is a specific (convenient) choice and is used in the "Fast and Simplex"
+          paper <a class="cite" href="#ref-4">[4]</a>. It keeps the logit an ordinary dot product in lifted space, and for pairs becomes the trilinear score.
+        </p>
+
+        $$s_{iJ} = \psi_i^\top \phi_J, \qquad \psi_i^\top \phi_{jk} = \sum_{\ell} q_{i\ell}\, k_{j\ell}\, k'_{k\ell}$$
+
+        <p>
+          The output is then computed by running softmax over the lifted dataset taking a kernel-weighted
+          average of the tuple values. We have now moved to local constant regression over lifted simplices.
+        </p>
+
+        $$o_i^{(n,0)} = \mathbb{E}_{p_i}[u_J], \qquad p_{iJ} = \frac{\exp(\psi_i^\top \phi_J / h)}{\sum_{J'} \exp(\psi_i^\top \phi_{J'} / h)}$$
+
+        <p>
+          For $n = 1$ this is ordinary softmax attention. For $n = 2$ it is 2-simplicial
+          attention <a class="cite" href="#ref-5">[5]</a>, and so on. We haven't changed the regression problem, only the data.
+
+        <div class="post-figure">
+          <canvas id="lift-canvas" class="canvas-2d"></canvas>
+          <div class="post-figure-caption">Tokens lift into simplex datapoints.</div>
+          <div class="viz-controls">
+            <div class="viz-group">
+              <span class="viz-group-label">order $n$</span>
+              <button class="descent-btn" data-n="1">1</button>
+              <button class="descent-btn" data-n="2">2</button>
+              <button class="descent-btn" data-n="3">3</button>
+            </div>
+            <div class="viz-group">
+              <span class="viz-group-label">tokens</span>
+              <input type="range" id="lift-L" min="3" max="8" step="1" value="6">
+              <span class="walk-label" id="lift-L-val">6</span>
+            </div>
+          </div>
+        </div>
+
+        <h2 class="post-section">From local constant to local polynomial</h2>
+
+        <p>
+          Now hold $n$ and turn the $k$ knob. Softmax fits a constant to the local cloud
+          of tuples, but we can fit a polynomial instead and read it off at the query.
+        </p>
+
+        <p>
+         We center the lifted features at the query and build monomial features up to
+          degree $k$.
+        </p>
+
+        $$z_J = \phi_J - \psi_i, \qquad \chi_k(z) = \big[\,1,\; z,\; z^{\otimes 2},\; \dots,\; z^{\otimes k}\,\big]$$
+
+        <p>
+          The exact $(n,k)$ estimator is a weighted least squares fit of a degree-$k$
+          polynomial over the simplex dataset, with an optional regularizer.
+        </p>
+
+        $$\hat P_i = \arg\min_{P \in \Pi_k} \sum_{J \in \mathcal{C}_i^{(n)}} w_{iJ}\,\big\| P(\phi_J - \psi_i) - u_J \big\|^2 + \Omega(P)$$
+
+        <p>
+          The output is that polynomial evaluated at the query center, where $z = 0$, aka the intercept.
+        </p>
+
+        $$o_i^{(n,k)} = \hat P_i(0)$$
+
+        <p>
+          $(n,k)$-local polynomial simplicial attention is simply local polynomial
+          regression over lifted simplex datapoints.
+        </p>
+
+        <div class="post-figure">
+          <canvas id="poly-canvas" class="canvas-2d"></canvas>
+          <div class="post-figure-caption">Local polynomial fit at the query (degree $0$ is softmax, degree $1$ is LLA, degree $2$ adds curvature).</div>
+          <div class="viz-controls">
+            <div class="viz-group">
+              <span class="viz-group-label">degree $k$</span>
+              <button class="descent-btn" data-k="0">0</button>
+              <button class="descent-btn" data-k="1">1</button>
+              <button class="descent-btn" data-k="2">2</button>
+            </div>
+            <div class="viz-group">
+              <span class="viz-group-label">bandwidth $h$</span>
+              <input type="range" id="poly-h" min="0.03" max="0.4" step="0.01" value="0.12">
+              <span class="walk-label" id="poly-h-val">0.12</span>
+            </div>
+          </div>
+        </div>
+
+        <h2 class="post-section">The equivalent-kernel view</h2>
+
+        <p>
+          The fit has a closed form, but it looks quite different from softmax weights.
+          We stack the monomial features and form the weighted Gram matrix, then solve the normal equations for the polynomial coefficients (ignoring the regularizer for a moment).
+        </p>
+
+        $$G_i = \sum_J w_{iJ}\, \chi_J \chi_J^\top, \qquad \Theta_i = G_i^{-1} \sum_J w_{iJ}\, \chi_J u_J^\top, \qquad \chi_J = \chi_k(z_J)$$
+
+        <p>
+         If we pull out the constant coefficient with $e_0$ then the output collapses back to
+          a weighted sum of values.
+        </p>
+
+        $$o_i^{(n,k)} = \sum_J a_{iJ}^{(k)}\, u_J, \qquad a_{iJ}^{(k)} = w_{iJ}\, e_0^\top G_i^{-1} \chi_k(z_J)$$
+
+        <p>
+          Notably, the weights $a_{iJ}^{(k)}$ are signed -> they are not probabilities, and that is
+          precisely the point. Instead, they satisfy moment conditions that say exactly what the estimator
+          reproduces, holding whenever $G_i$ is invertible. 
+        </p>
+
+        $$\sum_J a_{iJ}^{(k)} = 1, \qquad \sum_J a_{iJ}^{(k)}\, z_J^{\otimes r} = 0 \quad (1 \le r \le k)$$
+
+        <p>
+          The first condition preserves mass and the rest cancel every local moment up to
+          order $k$. At $k = 0$ you are only mass-preserving and you are back at softmax. At
+          $k = 1$ you also cancel the first moment, which is LLA and Parallax. At
+          $k = 2$ you cancel curvature, and so on. Degree $k$ estimates the local $k$-jet of the
+          value function.
+        </p>
+
+        <h2 class="post-section">Learn the probe instead of solving</h2>
+
+        <p>
+          The exact fit is hopeless at scale, since each query needs its own solve over
+          monomial features and the feature dimension blows up fast. Parallax's insight
+          is to stop solving and learn the probe directly instead.
+        </p>
+
+        $$o_i^{\textsf{PLX}} = o_i^{\textsf{SA}} - \Sigma_{KV}^{(i)} \rho_i, \qquad \rho_i = W_R x_i$$
+
+        <p>
+          The same idea lifts to higher degree. We build centered polynomial statistics and
+          contract them against a learned probe. Note that the probe carries the sign, so this
+          reduces to Parallax at $(1,1)$.
+        </p>
+
+        $$o_i^{(n,k)\text{-PLX}} = \mathbb{E}_{p_i}[u_J] + \operatorname{Cov}_{p_i}\big(u_J, \tau_k(\phi_J)\big)\, \theta_i, \qquad \theta_i = R_k(x_i)$$
+
+        $$o_i = \mathbb{E}_{p_i}[u_J] + \sum_{r=1}^{k} \operatorname{Cov}_{p_i}\big(u_J, \phi_J^{\otimes r}\big)\, \theta_{i,r}$$
+
+        <p>
+          At $k = 2$ this is two corrections stacked on softmax: the first is linear
+          Parallax and the second is a learned curvature probe.
+        </p>
+
+        $$o_i = \mathbb{E}[u_J] + \operatorname{Cov}(u_J, \phi_J)\, \rho_i + \operatorname{Cov}(u_J, \phi_J^{\otimes 2})\, H_i$$
+
+        <h2 class="post-section">The streaming form survives</h2>
+
+        <p>
+          For real kernels you never want $G_i^{-1}$. Instead, you want the moment form, because
+          it streams over KV blocks the way Parallax does, with extra branches but no
+          extra I/O. To do this, we keep running accumulators for the weights, the value sum, and each
+          polynomial moment.
+        </p>
+
+        $$D = \sum_J w_J, \quad O = \sum_J w_J u_J, \quad M_r = \sum_J w_J\, \phi_J^{\otimes r}, \quad C_r = \sum_J w_J\, u_J \otimes \phi_J^{\otimes r}$$
+
+        <p>
+          The covariance at order $r$ is the cross moment minus the outer product of the
+          means.
+        </p>
+
+        $$\operatorname{Cov}(u, \phi^{\otimes r}) = \frac{C_r}{D} - \frac{O}{D} \otimes \frac{M_r}{D}$$
+
+        <p>
+          The forward is then the value mean plus the probed corrections, with one per order.
+        </p>
+
+        $$o_i = \frac{O}{D} + \sum_{r=1}^{k} \left( \frac{C_r}{D} - \frac{O}{D} \otimes \frac{M_r}{D} \right) \theta_{i,r}$$
+
+        <p>
+          The exact $\theta_{i,r}$ is a full order-$r$
+          tensor.
+        </p>
+        <h2 class="post-section">Example: 2-simplicial LLA</h2>
+
+        <p>
+          For conreteness let us consider the case of $(2,1)$. 2-simplicial LLA/Parallax is ordinary LLA/Parallax with token-pairs as the datapoints.
+          We lift each pair to one key and one value through a Hadamard product.
+        </p>
+
+        $$\phi_{jk} = k_j \odot k'_k, \qquad u_{jk} = v_j \odot v'_k$$
+        $$o_i^{\textsf{2LLA}} = o_i^{\textsf{2SA}} - (1 + \eta_i)\, \Sigma_{U\Phi}^{(i)} \rho_i^\star, \qquad \rho_i^\star = \Sigma_i^{-1} \mu_i$$
+
+        <p>
+          We replace the per-query solve with a learned probe and drop the boundary factor, exactly as Parallax does.
+        </p>
+
+        $$o_i^{\textsf{2PLX}} = o_i^{\textsf{2SA}} - \Sigma_{U\Phi}^{(i)} W_R x_i$$
+
+        $$o_i^{\textsf{2PLX}} = \sum_{(j,k) \in \mathcal{C}_i} s_{ijk}\, u_{jk}, \qquad s_{ijk} = p_{ijk}(1 - a_{ijk} + \bar a_i), \qquad \sum_{j,k} s_{ijk} = 1$$
+
+        <p>
+          Ordinary LLA corrects boundary bias in the local cloud of tokens, whereas 2-simplicial LLA/Parallax corrects
+          it in the local cloud of token-pairs. It's the same regression, but with richer datapoints.
+        </p>
+
+        <h2 class="post-section">Why this design space</h2>
+
+        <p>
+          Both knobs do the same thing for different reasons. They change how the
+          regressor behaves outside the data it has already seen.
+        </p>
+
+        <p>
+          Softmax attention is stuck inside the convex hull of its values. The output
+          is a convex combination, so it can interpolate but never extrapolate. Both
+          axes break out of the hull, in different ways.
+        </p>
+
+        <p>
+          The simplicial axis expands the hull itself. A lifted datapoint
+          $\phi_{jk} = k_j \odot k'_k$ is a product of keys, so it generally lands
+          somewhere the original keys never reach. Adding pairs and triples enriches the
+          cloud with points outside the original convex hull, and the regressor gets new
+          directions to retrieve along.
+        </p>
+
+        <p>
+          The polynomial axis changes the shape of the fit at the boundary. A local
+          constant flattens out past the edge of the data, which is the boundary bias.
+          A local linear fit carries the local slope outward, and a local quadratic
+          carries curvature. Higher degree extrapolates more aggressively, for better
+          or worse.
+        </p>
+
+        <p>
+          The plot below makes this concrete. Keys are 2D and values are 1D, so the
+          regression is a height field over the key plane. Drag to rotate. Sweep the
+          degree and the number of points and watch the surface away from the data,
+          where extrapolation and enrichment live.
+        </p>
+
+        <div class="post-figure">
+          <canvas id="landscape-canvas"></canvas>
+          <div class="post-figure-caption">Local polynomial regression landscape over a 2D key plane. Bright points are tokens, dimmer points are lifted pair and triple datapoints.</div>
+          <div class="viz-controls">
+            <div class="viz-group">
+              <span class="viz-group-label">simplex $n$</span>
+              <button class="descent-btn" data-ln="1">1</button>
+              <button class="descent-btn" data-ln="2">2</button>
+              <button class="descent-btn" data-ln="3">3</button>
+            </div>
+            <div class="viz-group">
+              <span class="viz-group-label">degree $k$</span>
+              <button class="descent-btn" data-lk="0">0</button>
+              <button class="descent-btn" data-lk="1">1</button>
+              <button class="descent-btn" data-lk="2">2</button>
+            </div>
+            <div class="viz-group">
+              <span class="viz-group-label">tokens</span>
+              <input type="range" id="land-n" min="6" max="40" step="1" value="18">
+              <span class="walk-label" id="land-n-val">18</span>
+            </div>
+            <div class="viz-group">
+              <span class="viz-group-label">bandwidth $h$</span>
+              <input type="range" id="land-h" min="0.15" max="1.2" step="0.05" value="0.5">
+              <span class="walk-label" id="land-h-val">0.50</span>
+            </div>
+          </div>
+        </div>
+
+        <h2 class="post-section">What explodes</h2>
+
+        <p>
+          The number of simplices per query
+          grows polynomially in context length, and the monomial dimension grows fast in
+          the degree once the lifted features have width $m$.
+        </p>
+
+        $$|\mathcal{C}_i^{(n)}| = O(i^n), \qquad \dim\big(\phi_J^{\otimes k}\big) = \binom{m + k}{k}$$
+
+        <p>
+          The exact estimator is feasible only for tiny $n$, $k$, and feature width. There are only a few cases that are actually tractable, such as 
+          the $(2,1)$ case. There are ways to overcome this barrier through approximation, but we will not explore that here.
+        </p>
+
+        <h2 class="post-section">Exploring the landscape</h2>
+
+        <p>
+          $(2,1)$ gives pairwise relational retrieval with first-order debiasing and 
+          $(1,2)$ gives ordinary attention with a curvature correction. Full $(2,2)$ is the next step which makes the most sense, though will require careful kernel desing. 
+        </p>
+
+        <p>
+          $(n,k)$-simplicial Parallax estimates a $k$-jet of a value function defined
+          over $n$-token relational memories.
+        </p>
+
+        <h2 class="post-section">References</h2>
+
+        <p class="post-ref" id="ref-1">[1] Wang et al., "Test-Time Regression: A Unifying Framework for Attention Mechanisms", 2025.</p>
+        <p class="post-ref" id="ref-2">[2] Zuo, Yin, Zeng, Li, Zhu, Wang, <a href="https://arxiv.org/abs/2510.01450" target="_blank" rel="noopener">"Local Linear Attention: An Optimal Interpolation of Linear and Softmax Attention for Test-Time Regression"</a>, arXiv 2025.</p>
+        <p class="post-ref" id="ref-3">[3] Zuo, Pai, Zeng, Dewulf, Hu, Wang, <a href="https://blog.tilderesearch.com/blog/parallax" target="_blank" rel="noopener">"Parallax: Parameterized Local Linear Attention for Language Modeling"</a>, Tilde Research 2026.</p>
+        <p class="post-ref" id="ref-4">[4] Roy et al., <a href="https://arxiv.org/abs/2507.02754" target="_blank" rel="noopener">"Fast and Simplex: 2-Simplicial Attention in Triton"</a>, arXiv 2025.</p>
+        <p class="post-ref" id="ref-5">[5] Clift, Doryn, Murfet, Wallbridge, <a href="https://arxiv.org/abs/1909.00668" target="_blank" rel="noopener">"Logic and the 2-Simplicial Transformer"</a>, ICLR 2020.</p>
+        <!-- TODO: Nadaraya-Watson, local polynomial regression (Fan & Gijbels) references -->
+
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/dhruvbpai" target="_blank" rel="noopener">github</a>
+        <a href="https://scholar.google.com/citations?user=b8KdzTYAAAAJ" target="_blank" rel="noopener">scholar</a>
+        <a href="https://linkedin.com/in/dhruvpai" target="_blank" rel="noopener">linkedin</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/blog/simplicial-attention/grid.js"></script>
+  <script src="/blog/simplicial-attention/viz.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="/blog/simplicial-attention/landscape.js"></script>
+  <script>
+    (function() {
+      var theme = document.documentElement.getAttribute('data-theme') || 'dark';
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = theme === 'dark' ? 'light' : 'dark';
+      });
+    })();
+
+    function toggleTheme() {
+      var html = document.documentElement;
+      var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = next === 'dark' ? 'light' : 'dark';
+      });
+    }
+  </script>
+</body>
+</html>
