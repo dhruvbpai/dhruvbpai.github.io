@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wall Attention is the Gibbs Kernel — Dhruv Pai</title>
+  <meta name="description" content="Softmax attention is kernel regression with a stationary RBF kernel. Wall Attention promotes it to the Gibbs kernel, the classical non-stationary RBF with a per-channel, position-dependent length scale.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});"></script>
+  <script>
+    (function() {
+      var t = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+  <script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="/" class="nav-name">Dhruv Pai</a>
+        <div class="nav-links">
+          <a href="/about/">about</a>
+          <a href="/blog/" class="active">blog</a>
+          <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"></button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="container">
+      <div class="post-header">
+        <h1 class="post-title">Wall Attention is the Gibbs Kernel</h1>
+        <div class="post-date">June 2026</div>
+      </div>
+
+      <div class="post-body">
+
+        <p class="post-question">
+          Softmax attention is akin to kernel regression with the Gaussian Kernel and Nadaraya-Watson estimator. Wall Attention, which generalizes diagonal forget gates to attention, lets length scale move 
+          per channel and per position. Wall Attention is akin to the Gibbs kernel from kernel regression theory, which is the classical
+          non-stationary generalization of the RBF.
+        </p>
+
+        <p>
+          The perspective that attention is kernel regression is well known at this point so I won't re-hash it fully here. Softmax attention is the Nadaraya-Watson estimator, a kernel-weighted
+          average of values, and the test-time regression line of work makes this precise
+          <a class="cite" href="#ref-2">[2]</a><a class="cite" href="#ref-3">[3]</a><a class="cite" href="#ref-4">[4]</a><a class="cite" href="#ref-5">[5]</a>.
+          The kernel is $\kappa(q,k) = \exp(q^\top k)$. Under QK-norm, $\lVert q\rVert = \lVert k\rVert = 1$,
+          so $q^\top k = 1 - \tfrac12\lVert q - k\rVert^2$ and the kernel is a Gaussian with
+          a single unit length scale.
+        </p>
+
+        $$\kappa(q_i, k_j) = e \cdot \exp\!\left(-\frac{\lVert q_i - k_j\rVert^2}{2\,\ell^2}\right), \qquad \ell = 1$$
+
+        <p>
+          The common constant $e$ cancels in the softmax denominator. The observation to make
+          is that $\ell$ is fixed at $1$ and identical everywhere, which makes the kernel
+          stationary - it only sees the distance $\lVert q - k\rVert$, and it treats every
+          region of representation space and every position in the sequence exactly the
+          same. My previous work on Wall Attention <a class="cite" href="#ref-1">[1]</a> generalizes softmax attention to let $\ell$ move, and the resulting object has a classical analogy in kernel regression theory.
+        </p>
+
+        <h2 class="post-section">The Gibbs kernel</h2>
+
+        <p>
+          A stationary kernel assumes the function it models is equally smooth everywhere.
+          For sequences in online regression, this is the wrong prior due to nonuniform information density. The
+          classical fix from the Gaussian process literature is to give every input its own
+          length scale. The Gibbs kernel <a class="cite" href="#ref-6">[6]</a> is the
+          canonical non-stationary RBF kernel with a per-coordinate length scale
+          $\ell_n(x)$.
+        </p>
+
+        $$k_{\mathrm{Gibbs}}(x, x') = \prod_{n=1}^{d} \left(\frac{2\,\ell_n(x)\,\ell_n(x')}{\ell_n(x)^2 + \ell_n(x')^2}\right)^{\!1/2} \exp\!\left(-\sum_{n=1}^{d} \frac{(x_n - x'_n)^2}{\ell_n(x)^2 + \ell_n(x')^2}\right)$$
+
+        <p>
+          The exponent is a squared distance where each coordinate is divided by
+          a position-dependent length scale, and the prefactor in front keeps the kernel
+          positive-definite as that length scale changes from point to point. If we set
+          $\ell_n(x) \equiv \ell$ for all $n$ and $x$, the prefactor collapses to $1$ and the
+          exponent becomes $-\lVert x - x'\rVert^2/(2\ell^2)$ which recovers the stationary RBF.
+          Intuitively, the Gibbs kernel is the minimal generalization of the RBF that lets the length
+          scale vary. We will show the Gibbs kernel lives inside Wall Attention.
+        </p>
+
+        <div class="post-figure">
+          <canvas id="gibbs-kernel" class="canvas-2d"></canvas>
+          <div class="post-figure-caption">
+            The Gibbs kernel anchored at $x_0$, against the stationary RBF. 
+            The RBF keeps one fixed width everywhere, while the Gibbs kernel narrows where the
+            length scale $\ell(x)$ is small and widens where it is large. Setting the variation to
+            zero makes $\ell(x)$ go flat, so Gibbs collapses back onto the RBF. For Wall, $x$ is
+            sequence position and $\ell(x_0) = 1/\sqrt{F}$ is set by the accumulated forget gate.
+          </div>
+          <div class="widget-controls">
+            <div class="widget-row">
+              <label>length-scale variation</label>
+              <input type="range" id="gibbs-variation" min="0" max="1" step="0.01" value="0.7">
+              <span id="gibbs-variation-val">0.70</span>
+            </div>
+          </div>
+        </div>
+
+        <h2 class="post-section">Wall Attention is a Gibbs kernel</h2>
+
+        <p>
+          Wall scores with a per-channel cumulative forget gate
+          $F_{ij,n} = \prod_{r=j+1}^{i} g_{r,n} \in (0,1]$, giving
+          $s_{ij} = \sum_n F_{ij,n}\, q_{i,n}\, k_{j,n}$ <a class="cite" href="#ref-1">[1]</a>.
+          If we apply the identity $qk = \tfrac12(q^2 + k^2 - (q-k)^2)$ channel by
+          channel, the score splits into an amplitude and a squared distance.
+        </p>
+
+        $$s_{ij} = \underbrace{\tfrac12 \sum_n F_{ij,n}\left(q_{i,n}^2 + k_{j,n}^2\right)}_{\log A_{ij}} \;-\; \sum_n \frac{(q_{i,n} - k_{j,n})^2}{2\,\ell_{ij,n}^2}, \qquad \boxed{\;\ell_{ij,n}^2 = \frac{1}{F_{ij,n}} = \prod_{r=j+1}^{i} g_{r,n}^{-1}\;}$$
+
+        <p>
+          Wall's kernel is a squared-exponential with a per-channel length
+          scale $\ell_{ij,n}$ and an amplitude $A_{ij}$ out front, which is exactly the Gibbs
+          kernel.
+        </p>
+
+        $$\kappa^{\mathrm{Wall}}(q_i, k_j) = A_{ij} \cdot \exp\!\left(-\sum_n \frac{(q_{i,n} - k_{j,n})^2}{2\,\ell_{ij,n}^2}\right)$$
+
+        <p>
+          The length scale $\ell_{ij,n}^2 = 1/F_{ij,n}$ grows with the accumulated forgetting
+          between the two positions. One perspective on
+          per-channel forgetting is just as per-channel length-scale growth. Intuitively, a channel whose gate stays open
+          ($g_{r,n} \approx 1$) keeps $\ell_{ij,n} \approx 1$ and acts like vanilla NoPE
+          attention while a channel that closes inflates its length scale
+          as the gap widens, flattening its contribution until it drops out. The fixed Gibbs 
+          hyperparameter $\ell = 1$ becomes a learned, data-dependent length-scale field.
+        </p>
+
+        <div class="post-figure">
+          <div id="aniso-3d" class="canvas-3d"></div>
+          <div class="post-figure-caption">
+            A query sits at the origin and the vanilla RBF (faint) and anisotropic Gibbs kernel (blue) are both shown attending to nearby keys.
+          </div>
+        </div>
+
+        <h2 class="post-section">Where the Gibbs kernel comes from</h2>
+
+        <p>
+          I really enjoy reading classical statistical learning theory, and the Gibbs kernel is a beautiful example. To give some context, it comes out of Gibbs's thesis on adaptive
+          Bayesian models <a class="cite" href="#ref-6">[6]</a> and sits inside the standard
+          treatment of non-stationary covariance functions for Gaussian process regression
+          <a class="cite" href="#ref-7">[7]</a>. It shows up wherever you want
+          kernel regression with smoothness that varies across the input, for example in geostatistics and
+          spatial models. Wall Attention is the same construction,
+          specialized to attention and learned end to end.
+        </p>
+        <p>
+          One small caveat is that the Gibbs uses the symmetric combination
+          $\ell_n(x)^2 + \ell_n(x')^2$, which is what keeps the kernel positive-definite,
+          and Wall's length scale
+          $\ell_{ij,n}^2 = \exp(P_{j,n} - P_{i,n})$ is directed from query to key over the span $(j, i]$. In a sense, Wall is the
+          causal specialization of the Gibbs kernel.
+        </p>
+
+        <p>
+          Diagonal gates (and their generalization to Wall) have strong empirical results but always felt unsatisfying from a theoretical perspective. While scalar weight decay for RNNs arises from normal L2 regularization and weight decay, diagonal gates impose a per-channel geometry that does not have clear precedent. With the Gibbs kernel,
+          we can see that Wall Attention is a natural, principled extension of the RBF kernel in Nadaraya-Watson for better length generalization. We can rely on rich, well-established tools to understand Wall from the kernel regression perspective 
+          <a class="cite" href="#ref-7">[7]</a><a class="cite" href="#ref-8">[8]</a>. I think this is a good direction to go in to understand Wall Attention, and the future of nonparametric attention mechanisms, better.
+        </p>
+
+        <h2 class="post-section">References</h2>
+
+        <p class="post-ref" id="ref-1">[1] Pai, Averbuch, Zhang, Keigwin, Dewulf, <a href="https://blog.tilderesearch.com/blog/wall-attn" target="_blank" rel="noopener">"Wall Attention: Length Generalization With Diagonal Gates"</a>, Tilde Research 2026.</p>
+        <p class="post-ref" id="ref-2">[2] Pai et al., <a href="https://blog.tilderesearch.com/vignettes/regression" target="_blank" rel="noopener">"Regression is All You Need"</a>, Tilde Research 2025.</p>
+        <p class="post-ref" id="ref-3">[3] Wang et al., <a href="https://arxiv.org/abs/2501.12352" target="_blank" rel="noopener">"Test-Time Regression: A Unifying Framework for Designing Sequence Models with Associative Memory"</a>, arXiv 2025.</p>
+        <p class="post-ref" id="ref-4">[4] Zuo, Yin, Zeng, Li, Zhu, Wang, <a href="https://arxiv.org/abs/2510.01450" target="_blank" rel="noopener">"Local Linear Attention: An Optimal Interpolation of Linear and Softmax Attention for Test-Time Regression"</a>, arXiv 2025.</p>
+        <p class="post-ref" id="ref-5">[5] Zuo, Pai, Zeng, Dewulf, Hu, Wang, <a href="https://blog.tilderesearch.com/blog/parallax" target="_blank" rel="noopener">"Parallax: Parameterized Local Linear Attention"</a>, Tilde Research 2026.</p>
+        <p class="post-ref" id="ref-6">[6] Gibbs, <a href="https://www.inference.org.uk/mng10/GP/thesis.pdf" target="_blank" rel="noopener">"Bayesian Methods for Adaptive Models"</a> (PhD thesis, Ch. 3, non-stationary covariance functions), 1997.</p>
+        <p class="post-ref" id="ref-7">[7] Paciorek, Schervish, <a href="https://papers.nips.cc/paper/2003/hash/326a8c055c0d04f5b06544665d8bb3ea-Abstract.html" target="_blank" rel="noopener">"Nonstationary Covariance Functions for Gaussian Process Regression"</a>, NeurIPS 2004.</p>
+        <p class="post-ref" id="ref-8">[8] Rasmussen, Williams, <a href="https://gaussianprocess.org/gpml/" target="_blank" rel="noopener">"Gaussian Processes for Machine Learning"</a> (&sect;4.2, non-stationary kernels), MIT Press 2006.</p>
+
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/dhruvbpai" target="_blank" rel="noopener">github</a>
+        <a href="https://scholar.google.com/citations?user=b8KdzTYAAAAJ" target="_blank" rel="noopener">scholar</a>
+        <a href="https://linkedin.com/in/dhruvpai" target="_blank" rel="noopener">linkedin</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/blog/wall-gibbs/gibbs.js"></script>
+  <script type="module" src="/blog/wall-gibbs/aniso.js"></script>
+  <script>
+    (function() {
+      var theme = document.documentElement.getAttribute('data-theme') || 'dark';
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = theme === 'dark' ? 'light' : 'dark';
+      });
+    })();
+
+    function toggleTheme() {
+      var html = document.documentElement;
+      var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      document.querySelectorAll('.theme-toggle').forEach(function(btn) {
+        btn.textContent = next === 'dark' ? 'light' : 'dark';
+      });
+    }
+  </script>
+</body>
+</html>
